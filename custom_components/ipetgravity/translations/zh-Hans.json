@@ -1,0 +1,70 @@
+{
+  "title": "宠有引力",
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接宠有引力",
+        "description": "输入从宠有引力 App 请求头里抓到的 token。",
+        "data": {
+          "token": "Token"
+        },
+        "data_description": {
+          "token": "宠有引力 App 请求头中的长期登录 token。"
+        }
+      },
+      "screen": {
+        "title": "选择家庭",
+        "description": "选择包含饮水机的宠有引力家庭。",
+        "data": {
+          "screen_id": "家庭"
+        }
+      },
+      "reauth_confirm": {
+        "title": "更新宠有引力 Token",
+        "description": "当前 token 已被宠有引力拒绝。请输入从 App 重新抓到的新 token。",
+        "data": {
+          "token": "Token"
+        }
+      },
+      "reconfigure": {
+        "title": "重新配置宠有引力",
+        "description": "更新 token 或选择其他宠有引力家庭。",
+        "data": {
+          "token": "Token",
+          "screen_id": "家庭"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接宠有引力。",
+      "invalid_auth": "宠有引力拒绝了这个 token。",
+      "invalid_token": "这个 token 看起来不是 JWT。",
+      "no_water_fountain": "这个账号下没有找到宠有引力饮水机。",
+      "screen_not_found": "这个 token 下找不到所选家庭。",
+      "unknown": "发生未知错误。"
+    },
+    "abort": {
+      "already_configured": "这个宠有引力家庭已经配置过了。",
+      "reauth_successful": "宠有引力认证已更新。"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "today_drink_milliliters": {
+        "name": "今日饮水量"
+      },
+      "today_drink_count": {
+        "name": "今日饮水次数"
+      },
+      "last_drink_milliliters": {
+        "name": "最近饮水量"
+      },
+      "last_drink_duration": {
+        "name": "最近饮水时长"
+      },
+      "last_drink_time": {
+        "name": "最近饮水时间"
+      }
+    }
+  }
+}

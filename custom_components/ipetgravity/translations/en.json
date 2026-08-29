@@ -1,0 +1,70 @@
+{
+  "title": "PetGravity",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect PetGravity",
+        "description": "Enter the token captured from the PetGravity app.",
+        "data": {
+          "token": "Token"
+        },
+        "data_description": {
+          "token": "The long-lived token from the PetGravity app request header."
+        }
+      },
+      "screen": {
+        "title": "Choose Home",
+        "description": "Choose the PetGravity home that contains the water fountain.",
+        "data": {
+          "screen_id": "Home"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update PetGravity Token",
+        "description": "The PetGravity token was rejected. Enter a fresh token captured from the app.",
+        "data": {
+          "token": "Token"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure PetGravity",
+        "description": "Update the token or selected PetGravity home.",
+        "data": {
+          "token": "Token",
+          "screen_id": "Home"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to PetGravity.",
+      "invalid_auth": "The token was rejected by PetGravity.",
+      "invalid_token": "The token does not look like a JWT.",
+      "no_water_fountain": "No PetGravity water fountain was found on this account.",
+      "screen_not_found": "The selected home was not found for this token.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This PetGravity home is already configured.",
+      "reauth_successful": "PetGravity authentication was updated."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "today_drink_milliliters": {
+        "name": "Today drinking volume"
+      },
+      "today_drink_count": {
+        "name": "Today drinking count"
+      },
+      "last_drink_milliliters": {
+        "name": "Last drinking volume"
+      },
+      "last_drink_duration": {
+        "name": "Last drinking duration"
+      },
+      "last_drink_time": {
+        "name": "Last drinking time"
+      }
+    }
+  }
+}
