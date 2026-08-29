@@ -62,4 +62,8 @@ The token is a long-lived app login token from the captured API traffic. If PetG
 
 Default polling interval is 5 minutes.
 
+## Version
+
+Current version: `0.1.1`
+
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.
