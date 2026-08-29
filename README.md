@@ -21,6 +21,22 @@ This custom integration polls the PetGravity cloud API captured from the iOS app
 
 ## Install
 
+### HACS custom repository
+
+1. Open HACS.
+2. Open the three-dot menu and choose custom repositories.
+3. Add this repository URL:
+
+```text
+https://github.com/aureole999/ipetgravity-home-assistant
+```
+
+4. Choose the `Integration` category.
+5. Download PetGravity from HACS.
+6. Restart Home Assistant.
+
+### Manual
+
 Copy the `custom_components/ipetgravity` folder into your Home Assistant `config/custom_components/` directory:
 
 ```text

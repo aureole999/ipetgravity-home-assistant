@@ -1,11 +1,13 @@
 {
   "domain": "ipetgravity",
   "name": "PetGravity",
-  "codeowners": [],
+  "codeowners": ["@aureole999"],
   "config_flow": true,
   "dependencies": [],
+  "documentation": "https://github.com/aureole999/ipetgravity-home-assistant#readme",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/aureole999/ipetgravity-home-assistant/issues",
   "requirements": [],
   "version": "0.1.0"
 }
