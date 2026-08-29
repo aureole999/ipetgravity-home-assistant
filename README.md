@@ -61,3 +61,5 @@ Paste the `token` value captured from a PetGravity app request header.
 The token is a long-lived app login token from the captured API traffic. If PetGravity later rejects it, Home Assistant will start a reauthentication flow and ask for a fresh token.
 
 Default polling interval is 5 minutes.
+
+The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.
