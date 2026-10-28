@@ -30,7 +30,55 @@
 - Today sensing dispense volume and count
 - Last device event and event time
 
-There are 16 sensors in total. The original daily drinking totals are home-level statistics; the new device totals refer to the configured fountain. The app displays `*TimeTotal` fields as **counts**, not seconds.
+These 16 HTTP sensors remain available. The original daily drinking totals are home-level statistics; the device totals refer to the configured fountain. The app displays `*TimeTotal` fields as **counts**, not seconds.
+
+## MQTT 实时状态与控制（0.3.0）
+
+不需要安装本地 MQTT broker，也不需要修改 HA 中已有的 MQTT 集成。PetGravity 直接连接厂商 MQTT 服务，只订阅通过账号发现的网关和饮水机。
+
+首次启用：更新后打开“设置 → 设备与服务 → PetGravity → 配置”，填写从 App 获取的 MQTT 用户名和密码，再启用 MQTT。连接凭据保存在你的 HA 配置中，公开仓库不包含这些值。尚未填写时，原有 HTTP 饮水统计继续工作。
+
+| 类型 | 新增功能 |
+|---|---|
+| 水量 | 水碗水量（mL）、水碗水量不足、水碗是否安装 |
+| 水箱与故障 | 净水箱缺水、污水箱满、两个水箱未安装、水碗未安装、加热故障、称重故障、倾倒故障、低电量告警 |
+| 其它状态 | MQTT 连接、设备在线、最近上报时间、电量、充电状态、温度、加热功率、出水及外接水泵状态 |
+| 开关 | 自动加热、自动补水、感应出水、提示音、童锁 |
+| 参数 | 目标温度、补水阈值/水量/间隔、感应阈值/水量/间隔、手动出水量、定时与节水模式参数、外接水泵补水/排水时长 |
+| 模式与操作 | 定时模式、外接水泵模式、自定义出水计划、倾倒出水一次、刷新设备状态 |
+
+不同固件上报的字段不同。没有上报的项目不会推测数值；例如加热传感器温度和水温是不同项目，原始状态代码不解释为未经确认的设备状态。
+
+水碗水量优先读取旧固件的 `waterVolume`；新固件使用 `weight.current`。本次已与用户 App 的 **81 mL** 显示核对一致，生产客户端又实测取得后续 **80 mL** 更新。若其它固件的字段含义不同，可以在选项中关闭称重字段兼容。
+
+超过 15 分钟的保留消息不会被当成当前状态。15 分钟内没有有效新上报、MQTT 断开或设备明确离线时，实时实体会变为不可用。设备主动上报会立即更新；集成也每 5 分钟使用 App 的查询/已绑定设备连接请求读取状态。移除水碗时水量不会当作 0 mL。
+
+控制命令需要新鲜状态和匹配的设备回执，保留同一设置中其它参数。超时后不会自动重发出水或设置命令。**实时读取已实测；设置和出水操作已核对 APK 并通过模拟测试，未对真实设备执行出水、加热或改设置来测试。**
+
+### 在 HA 中设置水位通知
+
+通知由你自己的 HA 自动化负责，集成不会创建自动化或发送通知：
+
+- 水碗提醒：使用“水碗水量”设置自己希望的数值阈值和持续时间；也可以使用“水碗水量不足”状态。这个状态默认低于 50 mL 开启，加水到 70 mL 恢复，可在集成选项中修改。
+- 净水箱提醒：使用“净水箱缺水”状态从关闭变为开启。
+- 污水箱提醒：使用“污水箱已满”状态从关闭变为开启。
+
+在“设置 → 设备与服务 → PetGravity → 配置”中，可以启用/关闭 MQTT、调整低水量状态阈值及恢复余量。通知对象、是否重复提醒、静默时段等放在 HA 自动化中设置。
+
+### 自定义出水计划
+
+`ipetgravity.set_dispensing_schedule` 保存并启用 1 至 12 个每天的出水时间点。每个时间点包含 `time`（`HH:MM`）及 `volume`（1 至 200 mL）；时间使用设备/App 的本地时间。该操作保留其它模式的参数，并切换至自定义计划模式。
+
+```yaml
+action: ipetgravity.set_dispensing_schedule
+data:
+  config_entry_id: YOUR_CONFIG_ENTRY_ID
+  schedule:
+    - time: "08:00"
+      volume: 80
+    - time: "20:00"
+      volume: 80
+```
 
 ## 登录 / Login
 
@@ -107,11 +155,11 @@ Choose either SMS login or token login.
 
 If PetGravity rejects the saved token, Home Assistant starts reauthentication with both login methods.
 
-Default polling interval is 5 minutes (four read-only requests per update). Failure of an extra device-statistics endpoint only makes its sensors unavailable; original drinking sensors can continue updating.
+HTTP polling interval is 5 minutes (four read-only requests per update). Failure of MQTT or an extra device-statistics endpoint does not stop the original HTTP drinking sensors.
 
 The current model supports one fountain per PetGravity home. Timestamps returned without an offset are interpreted using Home Assistant's configured timezone; the vendor does not provide a timezone in these responses. The device-totals endpoint always returns the server's current day.
 
-**Protocol boundary:** live water level, water temperature, battery and device controls use the app's separate MQTT channel. They are not exposed by the verified HTTP endpoints and are not implemented in this release. Account deletion, unbinding, firmware flashing and account profile operations are not exposed as HA actions. See [API findings](docs/api.md).
+The cloud MQTT connection follows the app's TCP protocol. Its username and password are supplied through integration options, separate from the user's HTTP token; no MQTT credentials are bundled in the public repository, and the HTTP token is never sent to the MQTT broker. Access requires an outbound connection to the vendor on port 1883. Account deletion, unbinding, firmware flashing, weighing calibration and gateway network changes are not exposed as HA actions. See [API findings](docs/api.md).
 
 ## Validation
 
@@ -119,6 +167,6 @@ Tested with Home Assistant `2026.10.4`. Install development dependencies from `r
 
 ## Version
 
-Current version: `0.2.0`
+Current version: `0.3.0`
 
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.

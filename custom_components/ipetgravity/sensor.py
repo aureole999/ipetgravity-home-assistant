@@ -31,6 +31,8 @@ from .const import (
     MODEL_WATER_FOUNTAIN,
 )
 from .coordinator import PetGravityDailyData, PetGravityDataUpdateCoordinator
+from .mqtt import nested, number
+from .mqtt_entity import PetGravityMqttEntity
 
 UNIT_MILLILITERS = "mL"
 
@@ -143,6 +145,66 @@ async def async_setup_entry(
         PetGravitySensor(coordinator, entry, description)
         for description in SENSOR_DESCRIPTIONS
     )
+    if entry.runtime_data.mqtt:
+        async_add_entities(
+            PetGravityLiveSensor(entry, *description) for description in LIVE_SENSORS
+        )
+
+
+LIVE_SENSORS = (
+    ("bowl_volume", None, "mL", SensorDeviceClass.VOLUME),
+    ("bowl_weight_raw", ("weight", "current"), None, None),
+    ("water_temperature", ("waterTemperature",), "°C", SensorDeviceClass.TEMPERATURE),
+    (
+        "ntc_temperature",
+        ("heating", "ntcTemperature"),
+        "°C",
+        SensorDeviceClass.TEMPERATURE,
+    ),
+    (
+        "ambient_temperature",
+        ("heating", "envTemperature"),
+        "°C",
+        SensorDeviceClass.TEMPERATURE,
+    ),
+    ("heating_power", ("heating", "power"), "W", SensorDeviceClass.POWER),
+    ("battery_level", ("batterPowerPercent",), "%", SensorDeviceClass.BATTERY),
+    ("charge_status", ("batteryChargeStatus",), None, None),
+    ("pump_status", ("waterPumpRunningStatus",), None, None),
+    ("external_pump_status", ("exPumpStatus",), None, None),
+    ("clean_tank_state", ("cleanWaterContainerState",), None, None),
+    ("waste_tank_state", ("dirtyWaterContainerState",), None, None),
+    ("device_last_report", None, None, SensorDeviceClass.TIMESTAMP),
+)
+
+
+class PetGravityLiveSensor(PetGravityMqttEntity, SensorEntity):
+    def __init__(self, entry, key, path, unit, device_class):
+        super().__init__(entry, key)
+        self.key, self.path = key, path
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        if unit is not None or key == "bowl_weight_raw":
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def available(self):
+        return (
+            self.coordinator.connected
+            if self.key == "device_last_report"
+            else super().available
+        )
+
+    @property
+    def native_value(self):
+        if self.key == "bowl_volume":
+            return self.coordinator.bowl_volume()
+        if self.key == "device_last_report":
+            stamp = self.coordinator.data.state_time
+            return (
+                dt.datetime.fromtimestamp(stamp, dt.UTC) if stamp is not None else None
+            )
+        return number(nested(self.coordinator.data.running, *self.path))
 
 
 class PetGravitySensor(

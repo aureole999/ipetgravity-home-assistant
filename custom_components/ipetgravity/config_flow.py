@@ -9,7 +9,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -35,6 +35,7 @@ from .const import (
     CONF_WATER_DEVICE_NAME,
     DOMAIN,
 )
+from .options_flow import PetGravityOptionsFlow
 
 SMS_COOLDOWN = 60
 
@@ -43,6 +44,11 @@ class PetGravityConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Authenticate with an existing token or an app SMS code."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        return PetGravityOptionsFlow()
 
     def __init__(self) -> None:
         """Keep phone numbers and codes out of persistent config entries."""

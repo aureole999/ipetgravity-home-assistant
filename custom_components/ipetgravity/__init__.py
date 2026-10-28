@@ -5,17 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
 from .api import PetGravityClient
-from .const import CONF_TOKEN
+from .const import CONF_MQTT_ENABLED, CONF_MQTT_PASSWORD, CONF_MQTT_USERNAME, CONF_TOKEN
 from .coordinator import PetGravityDataUpdateCoordinator
+from .mqtt import PetGravityMqttHub
 from .services import async_setup_services
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.BUTTON,
+    Platform.SELECT,
+]
 
 
 @dataclass
@@ -24,6 +32,7 @@ class PetGravityRuntimeData:
 
     client: PetGravityClient
     coordinator: PetGravityDataUpdateCoordinator
+    mqtt: PetGravityMqttHub | None = None
 
 
 type PetGravityConfigEntry = ConfigEntry[PetGravityRuntimeData]
@@ -42,12 +51,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: PetGravityConfigEntry) -
     coordinator = PetGravityDataUpdateCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
 
-    entry.runtime_data = PetGravityRuntimeData(client=client, coordinator=coordinator)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    hub = (
+        PetGravityMqttHub(hass, entry)
+        if entry.options.get(CONF_MQTT_ENABLED, True)
+        and entry.options.get(CONF_MQTT_USERNAME)
+        and entry.options.get(CONF_MQTT_PASSWORD)
+        else None
+    )
+    entry.runtime_data = PetGravityRuntimeData(
+        client=client, coordinator=coordinator, mqtt=hub
+    )
+    try:
+        if hub:
+            await hub.async_start()
+
+            async def async_stop(event):
+                await hub.async_stop()
+
+            entry.async_on_unload(
+                hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_stop)
+            )
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except BaseException:
+        if hub:
+            await hub.async_stop()
+        raise
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: PetGravityConfigEntry) -> bool:
     """Unload a PetGravity config entry."""
 
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded and entry.runtime_data.mqtt:
+        await entry.runtime_data.mqtt.async_stop()
+    return unloaded

@@ -44,7 +44,11 @@ def custom_integrations(enable_custom_integrations):
 @pytest.fixture
 def entry():
     return MockConfigEntry(
-        domain="ipetgravity", unique_id="42:1", data=ENTRY_DATA, title="Test fountain"
+        domain="ipetgravity",
+        unique_id="42:1",
+        data=ENTRY_DATA,
+        title="Test fountain",
+        options={"mqtt_enabled": False},
     )
 
 

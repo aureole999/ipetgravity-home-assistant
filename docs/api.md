@@ -52,4 +52,35 @@ Device events contain `eventStr`, `time`, `eventType`, `eventId` and sometimes `
 
 The APK also contains home/pet creation and editing, binding/unbinding, account/profile management, firmware-version checks, feedback and announcement endpoints. These do not provide additional verified fountain telemetry. They are not automatically exposed as control actions.
 
-The app uses `mqtt5_client` and `MqttManager` for live device state and commands. Water level, temperature, battery, heating, dispensing, child lock, timers and external-pump control need that protocol, including message parsing and acknowledgments. Its authentication differs from the HTTP token flow. Static identification alone is insufficient to claim these controls work; no MQTT commands were sent or added in 0.2.0.
+The app uses `mqtt5_client` and `MqttManager` for live device state and commands. In **0.3.0**, the integration adds that channel, including state parsing, scoped subscription, reconnects and command acknowledgments. Its authentication differs from the HTTP token flow.
+
+## MQTT verification in 0.3.0
+
+The distributed Android client connects using MQTT 5 over TCP port 1883. The integration first authenticates the home through the HTTP token, then subscribes only to these exact device topics (no wildcards):
+
+The examined APK embeds fixed MQTT client credentials. This establishes that app installations use those client defaults; it does not establish the credentials used by gateways or the server's ACL rules. The public integration does not embed those values: users enter MQTT credentials through HA integration options. Read-only testing was limited to the authenticated user's known device topics.
+
+- `v1/{gatewayMac}/D/{deviceMac}` — fountain reports and command replies.
+- `v1/{gatewayMac}/G` — gateway replies.
+- `v1/gateway/notify/{gatewayMac}` — gateway online notifications.
+
+Requests are published without retain to `v1/{gatewayMac}/S`. Each new request has a unique request ID. Payload MAC addresses are checked again after delivery.
+
+| Command | Meaning | Evidence |
+|---|---|---|
+| 1 | Gateway child online query | APK + live |
+| 2 | Connect/read an already-bound fountain | APK + live; results in fresh 101 and 110 reports |
+| 101 | Running state and complete settings report | APK + live |
+| 110 | Warning snapshot | APK + live empty all-clear snapshot |
+| 102 | One-shot dispensing | APK + mocked command/ack tests only |
+| 103 | Update setting sections | APK + mocked command/ack tests only |
+
+Static Dart field-table values resolve setting command `0xf14` to **103**, and dispensing command `0xf0c` to **102**. The app's setting methods preserve section objects such as `autoHeating`, `autoWaterReplenish`, `sensingWater`, `beep`, `childLock`, `exPump`, `remoteDischarge` and `timedWaterDischarge`.
+
+The device used for verification reports firmware code **10015** and `running.weight.current`, while the older APK also supports `running.waterVolume`. The user confirmed the first value of 81 corresponds to the app's 81 mL display. The production integration client subsequently retrieved a fresh 80 mL reading with fresh all-clear warning data. No real settings or dispensing commands were executed.
+
+The app treats a warning value of **-1** as active. The full empty command-110 object observed live means no warnings. This is separate from absence of a warning snapshot, which remains unknown. Water-bowl removal, stale/retained old data and broker disconnects do not become a zero-volume reading.
+
+For command acknowledgments, matching request ID, expected command, device scope, non-retained delivery, freshness and success code 200 are all required. A timeout is an uncertain result and is never retried automatically. After a success acknowledgment, the integration requests the authoritative state again instead of changing the entity optimistically.
+
+The MQTT client provides HA entities only. Alert routing, thresholds used directly on volume, delays, repeat notifications and quiet hours belong to the user's Home Assistant automations. The optional low-water binary entity also provides a configurable hysteresis threshold.

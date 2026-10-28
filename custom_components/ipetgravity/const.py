@@ -26,3 +26,12 @@ UPDATE_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 MANUFACTURER = "PetGravity"
 MODEL_GATEWAY = "Bluetooth Wi-Fi Gateway"
 MODEL_WATER_FOUNTAIN = "Smart Pet Water Fountain 2S"
+
+CONF_MQTT_ENABLED = "mqtt_enabled"
+CONF_MQTT_USERNAME = "mqtt_username"
+CONF_MQTT_PASSWORD = "mqtt_password"
+CONF_LOW_WATER_THRESHOLD = "low_water_threshold"
+CONF_LOW_WATER_HYSTERESIS = "low_water_hysteresis"
+CONF_WEIGHT_AS_VOLUME = "weight_as_volume"
+DEFAULT_LOW_WATER_THRESHOLD = 50
+DEFAULT_LOW_WATER_HYSTERESIS = 20

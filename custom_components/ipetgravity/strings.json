@@ -127,6 +127,177 @@
       },
       "last_device_event_time": {
         "name": "Last device event time"
+      },
+      "bowl_volume": {
+        "name": "Bowl water volume"
+      },
+      "bowl_weight_raw": {
+        "name": "Bowl raw weighing value"
+      },
+      "water_temperature": {
+        "name": "Water temperature"
+      },
+      "ntc_temperature": {
+        "name": "Heating sensor temperature"
+      },
+      "ambient_temperature": {
+        "name": "Ambient temperature"
+      },
+      "heating_power": {
+        "name": "Heating power"
+      },
+      "battery_level": {
+        "name": "Battery"
+      },
+      "charge_status": {
+        "name": "Charge status code"
+      },
+      "pump_status": {
+        "name": "Dispensing status code"
+      },
+      "external_pump_status": {
+        "name": "External pump status code"
+      },
+      "clean_tank_state": {
+        "name": "Clean tank status code"
+      },
+      "waste_tank_state": {
+        "name": "Waste tank status code"
+      },
+      "device_last_report": {
+        "name": "Last device report"
+      }
+    },
+    "binary_sensor": {
+      "mqtt_connected": {
+        "name": "MQTT connection"
+      },
+      "bowl_low": {
+        "name": "Bowl water low"
+      },
+      "bowl_present": {
+        "name": "Water bowl detected"
+      },
+      "heating_active": {
+        "name": "Heating active"
+      },
+      "cleanTankNotInstalled": {
+        "name": "Clean tank missing"
+      },
+      "wasteTankNotInstalled": {
+        "name": "Waste tank missing"
+      },
+      "scaleTankNotInstalled": {
+        "name": "Water bowl missing alarm"
+      },
+      "scaleHeatingError": {
+        "name": "Heating fault"
+      },
+      "scaleWeightSensorError": {
+        "name": "Weighing sensor fault"
+      },
+      "tiltFunctionError": {
+        "name": "Tilting fault"
+      },
+      "cleanWaterLow": {
+        "name": "Clean tank water low"
+      },
+      "wasteTankFull": {
+        "name": "Waste tank full"
+      },
+      "lowBattery": {
+        "name": "Low battery alarm"
+      },
+      "device_online": {
+        "name": "Device online"
+      }
+    },
+    "switch": {
+      "setting_autoHeating": {
+        "name": "Automatic heating"
+      },
+      "setting_autoWaterReplenish": {
+        "name": "Automatic refill"
+      },
+      "setting_sensingWater": {
+        "name": "Sensing dispense"
+      },
+      "setting_beep": {
+        "name": "Prompt sound"
+      },
+      "setting_childLock": {
+        "name": "Child lock"
+      }
+    },
+    "number": {
+      "config_heating_target": {
+        "name": "Heating target"
+      },
+      "config_refill_threshold": {
+        "name": "Refill threshold"
+      },
+      "config_refill_volume": {
+        "name": "Refill volume"
+      },
+      "config_refill_cooldown": {
+        "name": "Refill cooldown"
+      },
+      "config_sensing_threshold": {
+        "name": "Sensing upper threshold"
+      },
+      "config_sensing_volume": {
+        "name": "Sensing dispense volume"
+      },
+      "config_sensing_cooldown": {
+        "name": "Sensing cooldown"
+      },
+      "config_remote_volume": {
+        "name": "Manual dispense volume"
+      },
+      "config_timer_interval": {
+        "name": "Timed dispense interval"
+      },
+      "config_timer_volume": {
+        "name": "Timed dispense volume"
+      },
+      "config_saving_interval": {
+        "name": "Water saving interval"
+      },
+      "config_saving_volume": {
+        "name": "Water saving volume"
+      },
+      "config_external_refill_time": {
+        "name": "External pump refill duration"
+      },
+      "config_external_drain_time": {
+        "name": "External pump drain duration"
+      }
+    },
+    "button": {
+      "refresh_device": {
+        "name": "Refresh device state"
+      },
+      "dispense_once": {
+        "name": "Dispense once"
+      }
+    },
+    "select": {
+      "timer_mode": {
+        "name": "Dispensing plan mode",
+        "state": {
+          "interval": "Interval",
+          "timed": "Custom schedule",
+          "water_saving": "Water saving"
+        }
+      },
+      "external_pump_mode": {
+        "name": "External pump mode",
+        "state": {
+          "off": "Off",
+          "refill": "Clean tank refill",
+          "drain": "Waste tank drain",
+          "refill_and_drain": "Refill and drain"
+        }
       }
     }
   },
@@ -169,6 +340,41 @@
           "description": "Select a configured PetGravity integration entry."
         }
       }
+    },
+    "set_dispensing_schedule": {
+      "name": "Set dispensing schedule",
+      "description": "Save and activate 1 to 12 daily dispensing times, preserving other mode parameters.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PetGravity home"
+        },
+        "schedule": {
+          "name": "Times and dispensing volumes",
+          "description": "Each item contains time (HH:MM) and volume (1 to 200 mL)."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT and water level",
+        "description": "Set up notification delivery using HA automations. Trigger directly from bowl volume, or use the low-water binary state configured below.",
+        "data": {
+          "mqtt_enabled": "Enable MQTT telemetry and controls",
+          "mqtt_username": "MQTT username",
+          "mqtt_password": "MQTT password",
+          "low_water_threshold": "Low bowl volume threshold (mL)",
+          "low_water_hysteresis": "Recovery hysteresis (mL)",
+          "weight_as_volume": "Use the new firmware weighing field for volume"
+        },
+        "data_description": {
+          "weight_as_volume": "New firmware reports weight.current, verified against the app water-volume display. Disable if your firmware uses a different meaning."
+        }
+      }
+    },
+    "error": {
+      "mqtt_credentials_required": "Enter the MQTT username and password when enabling MQTT."
     }
   }
 }

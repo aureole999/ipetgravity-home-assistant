@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import (
@@ -19,6 +21,59 @@ from .const import CONF_SCREEN_ID, CONF_WATER_DEVICE_MAC, DOMAIN
 
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register actions once; unloaded entries receive a clear error."""
+
+    async def async_set_schedule(call: ServiceCall) -> None:
+        entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])
+        if (
+            entry is None
+            or entry.domain != DOMAIN
+            or entry.state is not ConfigEntryState.LOADED
+            or entry.runtime_data.mqtt is None
+        ):
+            raise ServiceValidationError(
+                "Select a loaded PetGravity entry with MQTT enabled"
+            )
+        schedule = call.data["schedule"]
+        if len({item["time"] for item in schedule}) != len(schedule):
+            raise ServiceValidationError("Schedule times must be unique")
+        current = entry.runtime_data.mqtt.data.setting.get("timedWaterDischarge")
+        if not isinstance(current, dict) or not isinstance(current.get("timed"), list):
+            raise ServiceValidationError(
+                "This firmware has not reported custom schedules"
+            )
+        updated = deepcopy(current)
+        updated["mode"] = 2
+        updated["timed"] = sorted(schedule, key=lambda item: item["time"])
+        await entry.runtime_data.mqtt.async_command(
+            103, {"timedWaterDischarge": updated}
+        )
+
+    if not hass.services.has_service(DOMAIN, "set_dispensing_schedule"):
+        hass.services.async_register(
+            DOMAIN,
+            "set_dispensing_schedule",
+            async_set_schedule,
+            schema=vol.Schema(
+                {
+                    vol.Required("config_entry_id"): cv.string,
+                    vol.Required("schedule"): vol.All(
+                        [
+                            vol.Schema(
+                                {
+                                    vol.Required("time"): vol.Match(
+                                        r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+                                    ),
+                                    vol.Required("volume"): vol.All(
+                                        vol.Coerce(int), vol.Range(min=1, max=200)
+                                    ),
+                                }
+                            )
+                        ],
+                        vol.Length(min=1, max=12),
+                    ),
+                }
+            ),
+        )
 
     async def async_handle(call: ServiceCall) -> ServiceResponse:
         entry = hass.config_entries.async_get_entry(call.data["config_entry_id"])

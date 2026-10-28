@@ -1,3 +1,19 @@
+set_dispensing_schedule:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: ipetgravity
+    schedule:
+      required: true
+      example:
+        - time: "08:00"
+          volume: 80
+        - time: "20:00"
+          volume: 80
+      selector:
+        object:
 get_drinking_history:
   fields:
     config_entry_id:

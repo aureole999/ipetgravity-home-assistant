@@ -127,6 +127,177 @@
       },
       "last_device_event_time": {
         "name": "最近设备事件时间"
+      },
+      "bowl_volume": {
+        "name": "水碗水量"
+      },
+      "bowl_weight_raw": {
+        "name": "水碗称重原始值"
+      },
+      "water_temperature": {
+        "name": "水温"
+      },
+      "ntc_temperature": {
+        "name": "加热传感器温度"
+      },
+      "ambient_temperature": {
+        "name": "环境温度"
+      },
+      "heating_power": {
+        "name": "加热功率"
+      },
+      "battery_level": {
+        "name": "电量"
+      },
+      "charge_status": {
+        "name": "充电状态代码"
+      },
+      "pump_status": {
+        "name": "出水状态代码"
+      },
+      "external_pump_status": {
+        "name": "外接水泵状态代码"
+      },
+      "clean_tank_state": {
+        "name": "净水箱状态代码"
+      },
+      "waste_tank_state": {
+        "name": "污水箱状态代码"
+      },
+      "device_last_report": {
+        "name": "设备最近上报时间"
+      }
+    },
+    "binary_sensor": {
+      "mqtt_connected": {
+        "name": "MQTT 连接"
+      },
+      "bowl_low": {
+        "name": "水碗水量不足"
+      },
+      "bowl_present": {
+        "name": "水碗已安装"
+      },
+      "heating_active": {
+        "name": "正在加热"
+      },
+      "cleanTankNotInstalled": {
+        "name": "净水箱未安装"
+      },
+      "wasteTankNotInstalled": {
+        "name": "污水箱未安装"
+      },
+      "scaleTankNotInstalled": {
+        "name": "水碗未安装告警"
+      },
+      "scaleHeatingError": {
+        "name": "加热故障"
+      },
+      "scaleWeightSensorError": {
+        "name": "称重传感器故障"
+      },
+      "tiltFunctionError": {
+        "name": "倾倒功能故障"
+      },
+      "cleanWaterLow": {
+        "name": "净水箱缺水"
+      },
+      "wasteTankFull": {
+        "name": "污水箱已满"
+      },
+      "lowBattery": {
+        "name": "低电量告警"
+      },
+      "device_online": {
+        "name": "设备在线"
+      }
+    },
+    "switch": {
+      "setting_autoHeating": {
+        "name": "自动加热"
+      },
+      "setting_autoWaterReplenish": {
+        "name": "自动补水"
+      },
+      "setting_sensingWater": {
+        "name": "感应出水"
+      },
+      "setting_beep": {
+        "name": "提示音"
+      },
+      "setting_childLock": {
+        "name": "童锁"
+      }
+    },
+    "number": {
+      "config_heating_target": {
+        "name": "目标水温"
+      },
+      "config_refill_threshold": {
+        "name": "自动补水触发水量"
+      },
+      "config_refill_volume": {
+        "name": "自动补水量"
+      },
+      "config_refill_cooldown": {
+        "name": "自动补水间隔"
+      },
+      "config_sensing_threshold": {
+        "name": "感应出水上限水量"
+      },
+      "config_sensing_volume": {
+        "name": "感应出水量"
+      },
+      "config_sensing_cooldown": {
+        "name": "感应出水间隔"
+      },
+      "config_remote_volume": {
+        "name": "手动出水量"
+      },
+      "config_timer_interval": {
+        "name": "定时出水间隔"
+      },
+      "config_timer_volume": {
+        "name": "定时出水量"
+      },
+      "config_saving_interval": {
+        "name": "节水模式间隔"
+      },
+      "config_saving_volume": {
+        "name": "节水模式出水量"
+      },
+      "config_external_refill_time": {
+        "name": "外接水泵加水时长"
+      },
+      "config_external_drain_time": {
+        "name": "外接水泵排水时长"
+      }
+    },
+    "button": {
+      "refresh_device": {
+        "name": "刷新设备状态"
+      },
+      "dispense_once": {
+        "name": "倾倒出水一次"
+      }
+    },
+    "select": {
+      "timer_mode": {
+        "name": "出水计划模式",
+        "state": {
+          "interval": "间隔模式",
+          "timed": "自定义计划",
+          "water_saving": "节水模式"
+        }
+      },
+      "external_pump_mode": {
+        "name": "外接水泵模式",
+        "state": {
+          "off": "关闭",
+          "refill": "净水箱补水",
+          "drain": "污水箱排水",
+          "refill_and_drain": "补水和排水"
+        }
       }
     }
   },
@@ -169,6 +340,41 @@
           "description": "选择已配置的宠有引力集成条目。"
         }
       }
+    },
+    "set_dispensing_schedule": {
+      "name": "设置自定义出水计划",
+      "description": "保存并启用自定义计划（1 至 12 个时间点），保留其它模式的参数。",
+      "fields": {
+        "config_entry_id": {
+          "name": "宠有引力家庭"
+        },
+        "schedule": {
+          "name": "时间与出水量",
+          "description": "列表中每项包含 time（HH:MM）和 volume（1 至 200 mL）。"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MQTT 与水量状态",
+        "description": "通知请在 HA 自动化中设置。可直接按“水碗水量”触发，或使用以下阈值计算的“水碗水量不足”状态。",
+        "data": {
+          "mqtt_enabled": "启用 MQTT 实时状态与控制",
+          "mqtt_username": "MQTT 用户名",
+          "mqtt_password": "MQTT 密码",
+          "low_water_threshold": "水碗低水量阈值（mL）",
+          "low_water_hysteresis": "恢复时需增加的水量（mL）",
+          "weight_as_volume": "兼容新固件的称重水量字段"
+        },
+        "data_description": {
+          "weight_as_volume": "新固件返回 weight.current；已与 App 的 mL 显示核对一致。不匹配的固件可以关闭此选项。"
+        }
+      }
+    },
+    "error": {
+      "mqtt_credentials_required": "启用 MQTT 时请填写连接用户名和密码。"
     }
   }
 }
