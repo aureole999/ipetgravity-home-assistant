@@ -291,6 +291,9 @@
       },
       "dispense_once": {
         "name": "Dispense once"
+      },
+      "pour_only": {
+        "name": "Pour out without refilling"
       }
     },
     "select": {

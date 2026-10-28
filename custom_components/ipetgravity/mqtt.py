@@ -77,6 +77,9 @@ class PetGravityTelemetry:
     state_time: float | None = None
     warning_time: float | None = None
     software_version: str | int | None = None
+    software_version_code: int | None = None
+    gateway_version_code: int | None = None
+    gateway_info_time: float | None = None
 
 
 class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
@@ -203,13 +206,14 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
 
     @callback
     def async_refresh_device(self) -> None:
-        """Use the app's online query and existing-device connect/state request."""
+        """Read online state, bound fountain state and gateway firmware metadata."""
         if not self.connected or self._client is None:
             return
         self._last_query = time.monotonic()
         try:
             self._publish(1)
             self._publish(2, device=True)
+            self._publish(3)
         except HomeAssistantError:
             self.connected = False
             self.async_set_updated_data(self.data)
@@ -270,6 +274,24 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
                     HomeAssistantError("PetGravity rejected the device command")
                 )
         data = payload.get("data")
+        if (
+            fresh
+            and topic == self.topics[1]
+            and payload.get("commandId") == 3
+            and payload.get("code") == 200
+            and isinstance(data, dict)
+            and (
+                self.data.gateway_info_time is None
+                or stamp >= self.data.gateway_info_time
+            )
+        ):
+            code = nested(data, "deviceInfo", "firmwareVersionCode")
+            self.data.gateway_version_code = (
+                code if type(code) is int and code > 0 else None
+            )
+            self.data.gateway_info_time = stamp
+            self.async_set_updated_data(self.data)
+            return
         if fresh and payload.get("commandId") == 1 and isinstance(data, list):
             for child in data:
                 if (
@@ -310,6 +332,10 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             self.device_online = True
             self.data.software_version = data.get(
                 "softVersion", data.get("softVersionCode")
+            )
+            code = data.get("softVersionCode")
+            self.data.software_version_code = (
+                code if type(code) is int and code > 0 else None
             )
         elif command == 110 and (
             self.data.warning_time is None or stamp >= self.data.warning_time
@@ -396,6 +422,16 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
                 raise HomeAssistantError(
                     "PetGravity is self-cleaning; wait until it finishes"
                 )
+            if (
+                command == 102
+                and isinstance(data, dict)
+                and data.get("type") == 5
+                and not self.pour_only_supported
+            ):
+                raise HomeAssistantError(
+                    "Pour-only requires fresh firmware information: gateway newer than "
+                    "v1.0.4 and fountain newer than v1.0.14"
+                )
             request_id = uuid4().hex
             future = self.hass.loop.create_future()
             self._pending[request_id] = (command, future)
@@ -410,6 +446,20 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             finally:
                 self._pending.pop(request_id, None)
             self.async_refresh_device()
+
+    @property
+    def pour_only_supported(self) -> bool:
+        """Use the same strict firmware gates as app 1.2.0."""
+        stamp = self.data.gateway_info_time
+        return (
+            self.fresh()
+            and stamp is not None
+            and -300 <= time.time() - stamp <= MAX_AGE
+            and self.data.gateway_version_code is not None
+            and self.data.gateway_version_code > 10004
+            and self.data.software_version_code is not None
+            and self.data.software_version_code > 10014
+        )
 
     @property
     def self_clean_active(self) -> bool | None:

@@ -291,6 +291,9 @@
       },
       "dispense_once": {
         "name": "倾倒出水一次"
+      },
+      "pour_only": {
+        "name": "只倾倒，不加水"
       }
     },
     "select": {

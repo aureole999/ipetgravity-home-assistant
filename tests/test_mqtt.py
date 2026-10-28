@@ -51,6 +51,7 @@ def packet(hub, command=101, data=None, **updates):
         "data": data
         if data is not None
         else {
+            "softVersionCode": 10015,
             "running": {
                 "weight": {"current": 81},
                 "waterBasinIsDetected": True,
@@ -78,6 +79,98 @@ def packet(hub, command=101, data=None, **updates):
 
 def accept(hub, p):
     hub.async_handle_message(hub.topics[0], p)
+
+
+def gateway_info(hub, version=10005, **updates):
+    return packet(
+        hub,
+        3,
+        {"deviceInfo": {"firmwareVersionCode": version}},
+        deviceMac=None,
+        **updates,
+    )
+
+
+@pytest.mark.parametrize(
+    "gateway,water,supported",
+    [
+        (10005, 10015, True),
+        (10004, 10015, False),
+        (10005, 10014, False),
+        (None, 10015, False),
+        (10005, None, False),
+        ("10005", 10015, False),
+    ],
+)
+async def test_pour_only_firmware_boundaries(hub, gateway, water, supported):
+    p = packet(hub)
+    p["data"]["softVersionCode"] = water
+    accept(hub, p)
+    hub.async_handle_message(hub.topics[1], gateway_info(hub, gateway))
+    assert hub.pour_only_supported is supported
+    if not supported:
+        with pytest.raises(HomeAssistantError, match="firmware"):
+            await hub.async_command(102, {"type": 5})
+        hub._client.publish.assert_not_called()
+
+
+def test_gateway_firmware_scope_order_and_freshness(hub):
+    accept(hub, packet(hub))
+    g = gateway_info(hub, timestamp=int((time.time() - 1) * 1000))
+    g["data"]["network"] = {"password": "synthetic-private-network-value"}
+    accept(hub, g)
+    assert not hub.pour_only_supported
+    hub.async_handle_message(hub.topics[1], {**g, "gatewayMac": "DEADBEEF0000"})
+    assert not hub.pour_only_supported
+    hub.async_handle_message(hub.topics[1], g)
+    assert hub.pour_only_supported
+    assert "synthetic-private-network-value" not in str(hub.data)
+    old = gateway_info(hub, 10004, timestamp=g["timestamp"] - 1000)
+    hub.async_handle_message(hub.topics[1], old)
+    assert hub.pour_only_supported
+    hub.data.gateway_info_time = time.time() - 901
+    assert not hub.pour_only_supported
+
+
+async def test_pour_only_sends_type_five_once_and_waits_for_ack(hub):
+    accept(hub, packet(hub))
+    hub.async_handle_message(hub.topics[1], gateway_info(hub))
+    task = asyncio.create_task(hub.async_command(102, {"type": 5}))
+    await asyncio.sleep(0)
+    sent = json.loads(hub._client.publish.call_args.args[1])
+    assert sent["commandId"] == 102 and sent["data"] == {"type": 5}
+    assert sent["gatewayMac"] == hub.gateway and sent["deviceMac"] == hub.water
+    assert hub._client.publish.call_args.kwargs["retain"] is False
+    assert not task.done()
+    accept(hub, packet(hub, 102, {}, code=200, requestId=sent["requestId"]))
+    await task
+    commands = [json.loads(call.args[1]) for call in hub._client.publish.call_args_list]
+    assert [p["commandId"] for p in commands] == [102, 1, 2, 3]
+    assert "data" not in commands[-1] and "deviceMac" not in commands[-1]
+
+
+async def test_pour_only_timeout_does_not_repeat(hub):
+    accept(hub, packet(hub))
+    hub.async_handle_message(hub.topics[1], gateway_info(hub))
+    with patch("custom_components.ipetgravity.mqtt.COMMAND_TIMEOUT", 0.001):
+        with pytest.raises(HomeAssistantError, match="acknowledgment"):
+            await hub.async_command(102, {"type": 5})
+    assert hub._client.publish.call_count == 1
+
+
+async def test_pour_only_rechecks_firmware_after_waiting_for_command_lock(hub):
+    accept(hub, packet(hub))
+    hub.async_handle_message(hub.topics[1], gateway_info(hub))
+    await hub._command_lock.acquire()
+    task = asyncio.create_task(hub.async_command(102, {"type": 5}))
+    await asyncio.sleep(0)
+    p = packet(hub)
+    p["data"]["softVersionCode"] = 10014
+    accept(hub, p)
+    hub._command_lock.release()
+    with pytest.raises(HomeAssistantError, match="firmware"):
+        await task
+    hub._client.publish.assert_not_called()
 
 
 def test_bowl_compatibility_hysteresis_and_removal(hub):
@@ -235,6 +328,35 @@ async def test_real_ha_entities_and_options(hass, live_entry, client, caplog):
     assert state("number", "config_heating_target").state == "15"
     assert state("switch", "setting_autoHeating").state == "off"
     assert state("select", "timer_mode").state == "interval"
+    assert state("button", "pour_only").state == "unavailable"
+    hub.async_handle_message(hub.topics[1], gateway_info(hub))
+    await hass.async_block_till_done()
+    assert state("button", "pour_only").state != "unavailable"
+    with patch.object(hub, "async_command", new_callable=AsyncMock) as send:
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": state("button", "pour_only").entity_id},
+            blocking=True,
+        )
+        send.assert_awaited_once_with(102, {"type": 5})
+        send.reset_mock()
+        await hass.services.async_call(
+            "button",
+            "press",
+            {"entity_id": state("button", "dispense_once").entity_id},
+            blocking=True,
+        )
+        send.assert_awaited_once_with(102)
+    cleaning = packet(hub)
+    cleaning["data"]["running"]["selfClean"]["status"] = 1
+    accept(hub, cleaning)
+    await hass.async_block_till_done()
+    assert state("button", "pour_only").state == "unavailable"
+    with pytest.raises(HomeAssistantError, match="self-cleaning"):
+        await hub.async_command(102, {"type": 5})
+    accept(hub, packet(hub))
+    await hass.async_block_till_done()
     result = await hass.config_entries.options.async_init(live_entry.entry_id)
     assert result["step_id"] == "init"
     with patch.object(hub, "async_command", new_callable=AsyncMock) as send:

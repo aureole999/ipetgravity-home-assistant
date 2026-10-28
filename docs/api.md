@@ -51,9 +51,10 @@ Requests publish without retain to `v1/{gatewayMac}/S`, using unique request IDs
 |---|---|---|
 | 1 | Query gateway child online state | Static + live |
 | 2 | Connect/read an already-bound fountain | Static + live; produces 101/110 reports |
+| 3 | Read gateway information, omitting `data`; retain only firmware code/time | Static + live; same app method can edit settings only when `data` is supplied |
 | 101 | Running state and settings snapshot | Static + live |
 | 110 | Warning snapshot | Static + live empty all-clear snapshot |
-| 102 | One-shot dispensing | Static + mocked command/ack tests |
+| 102 | One-shot dispensing; `data.type=5` means pour-only | Static + mocked command/ack tests |
 | 103 | Update setting sections | Static + mocked command/ack tests |
 
 Current field definitions follow these recovered App 1.2.0 functions:
@@ -69,7 +70,11 @@ Current field definitions follow these recovered App 1.2.0 functions:
 
 Missing or invalid current fields stay unknown. Removed bowls, expired reports and offline devices do not produce a zero-volume reading. A complete empty 110 object is confirmed all-clear; no warning snapshot is unknown. The optional low-water binary sensor has a configurable threshold and recovery margin. Notifications remain the user's HA automations.
 
-`WaterDeviceState2._shouldBlockForSelfClean` blocks interactions while self-cleaning. The integration applies this check before sending 102/103, including after acquiring its command lock. State reads remain allowed. The app's standard one-shot command uses the default type 0 and omits `data`, which is unchanged in HA. The additional type 5 wash command and guided self-clean start are not exposed as generic buttons because they have preparation/version checks in the app.
+`WaterDeviceState2._shouldBlockForSelfClean` blocks interactions while self-cleaning. The integration applies this check before sending 102/103, including after acquiring its command lock. State reads remain allowed. The app's standard one-shot command uses the default type 0 and omits `data`, which is unchanged in HA.
+
+Version 0.4.2 adds an independent pour-only button. The `waterDeviceWashBowlDesc` localization is “只倾倒不出水” / “Tip only”; its Bluetooth-page callback invokes `_sendWaterOutByType`, which supplies type **5** to `waterOutCommand`. The UI requires gateway `deviceInfo.firmwareVersionCode > 10004` and fountain `softVersionCode > 10014`. HA checks those exact boundaries, fresh reports from both devices, and self-clean state. The capability check runs again inside the command lock before sending. Unknown firmware leaves the button unavailable. A new read-only command 3 fetches gateway firmware with the regular refresh; it never includes a settings body. Guided self-clean start remains in the app.
+
+Read-only production-client verification on 2026-10-29 received command-3 firmware code **10005** and command-101 fountain code **10015**, enabling pour-only support. Only the code and report timestamp are retained from the gateway response; network settings are not stored. The new physical action was verified with mocked wire payloads and acknowledgments, including no automatic retry after timeout; it was not performed on the user's real fountain during development.
 
 Settings retain the reported fields of their section, including `autoHeating`, `autoWaterReplenish`, `sensingWater`, `beep`, `childLock`, `exPump`, `remoteDischarge`, and `timedWaterDischarge`. Commands require fresh state and matching, non-retained, successful acknowledgments. A timed-out physical action is never retried automatically. No live dispensing, heating, self-clean start or setting changes were performed to validate this release.
 
