@@ -17,7 +17,7 @@ from homeassistant.util import dt as dt_util
 from .api import PetGravityAuthError, PetGravityClient, PetGravityError
 from .const import (
     CONF_SCAN_INTERVAL,
-    CONF_SCREEN_ID,
+    CONF_SCENE_ID,
     CONF_WATER_DEVICE_ID,
     CONF_WATER_DEVICE_MAC,
     DEFAULT_SCAN_INTERVAL,
@@ -78,14 +78,14 @@ class PetGravityDataUpdateCoordinator(DataUpdateCoordinator[PetGravityDailyData]
             config_entry=entry,
         )
         self.client = client
-        self.screen_id = int(entry.data[CONF_SCREEN_ID])
+        self.screen_id = entry.data.get(CONF_SCENE_ID)
         self.water_mac = entry.data[CONF_WATER_DEVICE_MAC]
-        self.device_id: int | None = entry.data.get(CONF_WATER_DEVICE_ID)
+        self.device_id: str | None = entry.data.get(CONF_WATER_DEVICE_ID)
         self._optional_failures: set[str] = set()
 
     async def _async_setup(self) -> None:
-        """Discover the device ID for existing 0.1.x entries without re-adding."""
-        if self.device_id is not None:
+        """Match the V2 IDs by MAC; retain the entity identity in screen_id."""
+        if self.screen_id is not None and self.device_id is not None:
             return
         try:
             screens = await self.client.async_get_screens()
@@ -95,17 +95,15 @@ class PetGravityDataUpdateCoordinator(DataUpdateCoordinator[PetGravityDailyData]
             raise UpdateFailed(str(err)) from err
         for screen in screens:
             water = screen.water_device
-            if (
-                screen.screen_id == self.screen_id
-                and water is not None
-                and water.mac.lower() == self.water_mac.lower()
-            ):
+            if water is not None and water.mac.lower() == self.water_mac.lower():
                 self.device_id = water.device_id
+                self.screen_id = screen.screen_id
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
                     data={
                         **self.config_entry.data,
                         CONF_WATER_DEVICE_ID: water.device_id,
+                        CONF_SCENE_ID: screen.screen_id,
                     },
                 )
                 return

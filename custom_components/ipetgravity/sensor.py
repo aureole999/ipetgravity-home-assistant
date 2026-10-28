@@ -154,7 +154,12 @@ async def async_setup_entry(
 LIVE_SENSORS = (
     ("bowl_volume", None, "mL", SensorDeviceClass.VOLUME),
     ("bowl_weight_raw", ("weight", "current"), None, None),
-    ("water_temperature", ("waterTemperature",), "°C", SensorDeviceClass.TEMPERATURE),
+    (
+        "water_temperature",
+        ("heating", "ntcTemperature"),
+        "°C",
+        SensorDeviceClass.TEMPERATURE,
+    ),
     (
         "ntc_temperature",
         ("heating", "ntcTemperature"),
@@ -174,6 +179,8 @@ LIVE_SENSORS = (
     ("external_pump_status", ("exPumpStatus",), None, None),
     ("clean_tank_state", ("cleanWaterContainerState",), None, None),
     ("waste_tank_state", ("dirtyWaterContainerState",), None, None),
+    ("self_clean_status", ("selfClean", "status"), None, None),
+    ("self_clean_times", ("selfClean", "times"), None, None),
     ("device_last_report", None, None, SensorDeviceClass.TIMESTAMP),
 )
 

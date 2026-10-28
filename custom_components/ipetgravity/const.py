@@ -8,6 +8,7 @@ DOMAIN = "ipetgravity"
 
 CONF_TOKEN = "token"
 CONF_SCREEN_ID = "screen_id"
+CONF_SCENE_ID = "scene_id"
 CONF_SCREEN_NAME = "screen_name"
 CONF_GATEWAY_MAC = "gateway_mac"
 CONF_WATER_DEVICE_MAC = "water_device_mac"
@@ -32,6 +33,5 @@ CONF_MQTT_USERNAME = "mqtt_username"
 CONF_MQTT_PASSWORD = "mqtt_password"
 CONF_LOW_WATER_THRESHOLD = "low_water_threshold"
 CONF_LOW_WATER_HYSTERESIS = "low_water_hysteresis"
-CONF_WEIGHT_AS_VOLUME = "weight_as_volume"
 DEFAULT_LOW_WATER_THRESHOLD = 50
 DEFAULT_LOW_WATER_HYSTERESIS = 20

@@ -16,7 +16,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 
 from .api import PetGravityAuthError, PetGravityError
-from .const import CONF_SCREEN_ID, CONF_WATER_DEVICE_MAC, DOMAIN
+from .const import CONF_WATER_DEVICE_MAC, DOMAIN
 
 
 def async_setup_services(hass: HomeAssistant) -> None:
@@ -84,7 +84,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         ):
             raise ServiceValidationError("Select a loaded PetGravity integration entry")
         client = entry.runtime_data.client
-        screen_id = entry.data[CONF_SCREEN_ID]
+        screen_id = entry.runtime_data.coordinator.screen_id
         try:
             if call.service == "get_drinking_history":
                 start = call.data["start_date"]

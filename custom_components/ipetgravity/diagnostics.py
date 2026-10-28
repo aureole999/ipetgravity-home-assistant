@@ -25,6 +25,10 @@ TO_REDACT = [
     "petId",
     "screenId",
     "screen_id",
+    "sceneId",
+    "scene_id",
+    "deviceId",
+    "water_device_id",
 ]
 
 

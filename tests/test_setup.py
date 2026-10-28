@@ -1,6 +1,7 @@
 """Load real HA entities, upgrade old entries, and exercise read-only actions."""
 
 import datetime as dt
+from dataclasses import replace
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
@@ -33,6 +34,36 @@ async def test_upgrade_and_entities(hass, entry, client):
     assert entry.runtime_data.coordinator.data.latest_event["intake"] == 10
     client.async_get_device_statistics.assert_awaited_once_with(3)
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_v2_id_migration_preserves_entity_identity(hass, entry, client):
+    from homeassistant.helpers import entity_registry as er
+
+    from .conftest import SCREEN
+
+    water = replace(SCREEN.water_device, device_id="FountainOpaque03")
+    client.async_get_screens.return_value = [
+        replace(SCREEN, screen_id="SceneOpaqueId001", water_device=water)
+    ]
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "water_device_id": 3}
+    )
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.unique_id == "42:1" and entry.data["screen_id"] == 1
+    assert entry.data["scene_id"] == "SceneOpaqueId001"
+    assert entry.data["water_device_id"] == "FountainOpaque03"
+    client.async_get_daily_statistics.assert_awaited_once_with(
+        "SceneOpaqueId001", entry.runtime_data.coordinator.data.date
+    )
+    client.async_get_device_statistics.assert_awaited_once_with("FountainOpaque03")
+    assert all(
+        entity.unique_id.startswith("1_aabbccddee01_")
+        for entity in er.async_entries_for_config_entry(
+            er.async_get(hass), entry.entry_id
+        )
+    )
 
 
 async def test_optional_endpoint_failure_preserves_existing_sensors(

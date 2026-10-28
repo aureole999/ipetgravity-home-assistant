@@ -27,6 +27,7 @@ from .const import (
     CONF_GATEWAY_MAC,
     CONF_PHONE,
     CONF_RESEND_CODE,
+    CONF_SCENE_ID,
     CONF_SCREEN_ID,
     CONF_SCREEN_NAME,
     CONF_TOKEN,
@@ -198,18 +199,28 @@ class PetGravityConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._screens = screens
         if self._entry is not None:
             screen = next(
-                (s for s in screens if s.screen_id == self._entry.data[CONF_SCREEN_ID]),
+                (
+                    s
+                    for s in screens
+                    if s.water_device is not None
+                    and s.water_device.mac.lower()
+                    == self._entry.data[CONF_WATER_DEVICE_MAC].lower()
+                ),
                 None,
             )
             if screen is None:
                 return self.async_abort(reason="wrong_account")
-            if (
-                self._entry.unique_id
-                and _unique_id(token, screen) != self._entry.unique_id
+            if decode_user_id_from_token(token) != decode_user_id_from_token(
+                self._entry.data[CONF_TOKEN]
             ):
                 return self.async_abort(reason="wrong_account")
             return self.async_update_reload_and_abort(
-                self._entry, data={**self._entry.data, **_entry_data(token, screen)}
+                self._entry,
+                data={
+                    **self._entry.data,
+                    **_entry_data(token, screen),
+                    CONF_SCREEN_ID: self._entry.data[CONF_SCREEN_ID],
+                },
             )
         if len(screens) == 1:
             return await self._async_create_entry_for_screen(screens[0])
@@ -286,6 +297,12 @@ class PetGravityConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Keep the existing account/home unique-ID format for upgrades."""
         await self.async_set_unique_id(_unique_id(self._token, screen))
         self._abort_if_unique_id_configured()
+        if screen.water_device is not None and any(
+            str(entry.data.get(CONF_WATER_DEVICE_MAC, "")).lower()
+            == screen.water_device.mac.lower()
+            for entry in self._async_current_entries()
+        ):
+            return self.async_abort(reason="already_configured")
         title = screen.water_device.name if screen.water_device else screen.name
         return self.async_create_entry(
             title=title, data=_entry_data(self._token, screen)
@@ -326,6 +343,7 @@ def _entry_data(token: str, screen: PetGravityScreen) -> dict[str, Any]:
     return {
         CONF_TOKEN: token,
         CONF_SCREEN_ID: screen.screen_id,
+        CONF_SCENE_ID: screen.screen_id,
         CONF_SCREEN_NAME: screen.name,
         CONF_GATEWAY_MAC: water_device.gateway_mac,
         CONF_WATER_DEVICE_ID: water_device.device_id,

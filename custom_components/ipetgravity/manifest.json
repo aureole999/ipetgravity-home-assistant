@@ -1,13 +1,17 @@
 {
   "domain": "ipetgravity",
   "name": "PetGravity",
-  "codeowners": ["@aureole999"],
+  "codeowners": [
+    "@aureole999"
+  ],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/aureole999/ipetgravity-home-assistant#readme",
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/aureole999/ipetgravity-home-assistant/issues",
-  "requirements": ["paho-mqtt==2.1.0"],
-  "version": "0.3.0"
+  "requirements": [
+    "paho-mqtt==2.1.0"
+  ],
+  "version": "0.4.0"
 }

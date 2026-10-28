@@ -1,86 +1,76 @@
-# API comparison and implementation evidence
+# App 1.2.0 protocol verification
 
-Compared the existing integration with Android APK **宠有引力 1.0.7**, package `com.petgravity.app`, version code 7. APK SHA-256: `bcb1c448991a63aa7e99b1e69f9afa511cdeae6995a8fbdcf455639d3fac09e1`.
+Compared with the user-supplied Android **宠有引力 1.2.0** APK, package `com.petgravity.app`, SHA-256 `6eb6add5a19a34ff2443e566ee028ecac99a857b9cb980e989d59873b9d0a27c`. The Flutter AOT library uses Dart 3.9.2. Version 0.4.0 uses the app's current HTTP endpoints and firmware fields only. There is no legacy endpoint or telemetry-field fallback.
 
-The Flutter AOT library uses Dart 3.9.2. Static analysis recovered the API methods, default form encoding, JSON models, and login callbacks. It confirms the same `https://app.ipetgravity.com` API base and custom `token` header used by the previous iOS capture.
+## HTTP endpoints
 
-## Integrated endpoints
+Base URL: `https://app.ipetgravity.com`. Authenticated requests carry the existing app token in the `token` header. Request formats were recovered from `http/api.dart` and `http/request.dart`.
 
-All methods below use POST. Fields are sent as form data unless specified as JSON.
-
-| Path | Request | Integration use | Verification |
+| Method | Path | Parameters / body | Purpose |
 |---|---|---|---|
-| `/device/getScreen` | Empty form | Discover homes, gateway MAC and fountain ID/MAC | APK + capture + live |
-| `/device/water/drinkWaterDataStatistics` | JSON: `screenId`, `startTime`, `endTime`, `type=DAY`, `rfid` | Existing home-level daily drinking sensors | APK + capture + live |
-| `/device/water/targetDayDrinkData` | `targetScreenId`, `time` | Existing last-drink sensors | APK + capture + live |
-| `/device/water/targetTimeDrinkData` | `targetScreenId`, `startTime`, `endTime`, `type=1` | On-demand daily history action | APK + capture + live |
-| `/device/water/todayWaterDeviceData` | `deviceId` | Nine device-specific daily volume/count sensors | APK + live |
-| `/device/getDeviceEventList` | `mac`, `time` | Last operation sensors and on-demand event history | APK + live |
-| `/pet/getPetTargetInfo` | `screenId` | On-demand pet target action | APK + capture + live empty list |
-| `/user/getLoginSmsCode` | `phone` | Send SMS after explicit UI submission | APK + mocked wire/flow tests; no live SMS |
-| `/user/loginWithSms` | `phone`, `code` | Obtain `data.token`, then discover devices | APK + mocked wire/flow tests; no live SMS |
+| GET | `/device/getScreenV2` | None | Homes, gateways and fountains |
+| POST | `/device/water/drinkWaterDataStatistics` | JSON: `sceneId`, `startTime`, `endTime`, `type=DAY`, `rfid` | Daily home-level statistics |
+| GET | `/device/water/targetDayDrinkDataV2` | Query: `sceneId`, `time` | Individual drinking events for a day |
+| GET | `/device/water/todayWaterDeviceDataV2` | Query: `deviceId` | Today's per-device totals |
+| POST | `/device/getDeviceEventListV2` | JSON: `mac`, `time` | Device operation history |
+| POST | `/pet/getPetTargetInfo` | Form: `sceneId` | Pets and drinking targets |
+| POST | `/user/getLoginSmsCode` | Form: `phone` | Send one login SMS after UI submission |
+| POST | `/user/loginWithSms` | Form: `phone`, `code` | Return `data.token` |
 
-Live read-only checks used the integration's actual Python client on 2026-10-28. No device settings were changed. Token values, personal identifiers and raw app code are not included in this repository.
+The authenticated read endpoints were tested with the user's own account on 2026-10-28. SMS request and response formats were checked statically and with mock tests; no SMS was sent. The same long-lived app token works with the V2 requests. No access/refresh token pair was found in the examined login methods; server-side token lifetime is not guaranteed.
 
-## Login details
+Discovery returns `data.screens`, with `sceneId`, `sceneName`, and `devices`. Device type **0** is a gateway; its type **1** children are Bluetooth fountains. Scene and device IDs are opaque strings, including letters, and differ from earlier server IDs for the same MAC. They are preserved exactly as strings in configuration and cloud requests, with no numeric conversion.
 
-- `API.sendSms` posts the phone map to `/user/getLoginSmsCode` using the request wrapper's default `application/x-www-form-urlencoded` encoding.
-- `API.loginWithSmsCode` constructs the form with `phone` and `code`. Its callback parses the returned `data` as `UserInfo`; that model contains `userId`, `token`, and profile fields.
-- The app's model exposes one normal application token. No access-token/refresh-token pair was found in these login methods. Absence from the examined paths does not establish a guaranteed server-side token lifetime.
-- `/user/loginWithToken` is called by **carrier one-click login** (`ali_one_key_login.dart`). Its input is a carrier SDK token. It is not a token-refresh endpoint and is not needed to use an existing app JWT.
-- Existing-token login validates through `/device/getScreen`. Decoding the unsigned JWT payload supplies only a stable account identifier, never authentication.
+On upgrade, the integration matches the configured fountain MAC against the current device list and saves the V2 scene/device IDs. The existing Home Assistant `screen_id` and entity unique IDs remain stable. Token replacement also matches by MAC and verifies the account ID. New discovery cannot create a duplicate of an existing fountain after the ID change.
 
-## Device statistics
+The history action uses the DAY statistics endpoint once per selected day and returns `{time, intake, bout}` daily summaries. Live comparison confirmed that DAY mode ignores a supplied multi-day end date, so a single DAY call cannot represent an arbitrary date range. The action is bounded to 31 days; periodic polling remains four reads every five minutes.
 
-`todayWaterDeviceData` returns:
+## Statistics and events
 
-| Field | Unit / meaning |
-|---|---|
-| `drinkVolumeTotal` | Device drinking volume, mL |
-| `drinkTimeTotal` | Drinking count |
-| `pumpVolumeTotal` | Dispensed volume, mL |
-| `pumpPourOutVolumeTotal` | Pour-out volume, mL; vendor field kept distinct from total dispensed volume |
-| `pumpTimeTotal` | Dispensing count |
-| `replVolumeTotal`, `replTimeTotal` | Refill volume in mL and count |
-| `sensVolumeTotal`, `sensTimeTotal` | Sensing dispense volume in mL and count |
+Per-device totals preserve these independent fields:
 
-The app UI displays the `*TimeTotal` values with `次`; these are not durations. Fields are preserved independently rather than deriving one total from another. The server supplies the day for this endpoint; it accepts no date argument.
+- `drinkVolumeTotal` / `drinkTimeTotal`: drinking mL / count.
+- `pumpVolumeTotal` / `pumpTimeTotal`: dispensing mL / count.
+- `pumpPourOutVolumeTotal`: pour-out mL.
+- `replVolumeTotal` / `replTimeTotal`: refill mL / count.
+- `sensVolumeTotal` / `sensTimeTotal`: sensing dispense mL / count.
 
-Device events contain `eventStr`, `time`, `eventType`, `eventId` and sometimes `result`. Unlike drinking events, these describe device operations, for example a pour-out operation. Text remains in the language supplied by the server.
+The app displays `*TimeTotal` as counts, not durations. Device events contain `eventStr`, `time`, `eventType`, `eventId`, and sometimes `result`. They are separate from individual drinking events.
 
-## Other paths and MQTT
+## MQTT and current firmware fields
 
-The APK also contains home/pet creation and editing, binding/unbinding, account/profile management, firmware-version checks, feedback and announcement endpoints. These do not provide additional verified fountain telemetry. They are not automatically exposed as control actions.
-
-The app uses `mqtt5_client` and `MqttManager` for live device state and commands. In **0.3.0**, the integration adds that channel, including state parsing, scoped subscription, reconnects and command acknowledgments. Its authentication differs from the HTTP token flow.
-
-## MQTT verification in 0.3.0
-
-The distributed Android client connects using MQTT 5 over TCP port 1883. The integration first authenticates the home through the HTTP token, then subscribes only to these exact device topics (no wildcards):
-
-The examined APK embeds fixed MQTT client credentials. This establishes that app installations use those client defaults; it does not establish the credentials used by gateways or the server's ACL rules. The public integration does not embed those values: users enter MQTT credentials through HA integration options. Read-only testing was limited to the authenticated user's known device topics.
+The gateway-connected Bluetooth fountain continues to use MQTT 5 on TCP port 1883. MQTT credentials are entered in HA options; the public repository contains no vendor credential values. The HTTP token is not sent to MQTT. Subscriptions are limited to the authenticated user's exact gateway/fountain topics:
 
 - `v1/{gatewayMac}/D/{deviceMac}` — fountain reports and command replies.
 - `v1/{gatewayMac}/G` — gateway replies.
 - `v1/gateway/notify/{gatewayMac}` — gateway online notifications.
 
-Requests are published without retain to `v1/{gatewayMac}/S`. Each new request has a unique request ID. Payload MAC addresses are checked again after delivery.
+Requests publish without retain to `v1/{gatewayMac}/S`, using unique request IDs. Payload MACs are checked. The app's separate standalone dual-band Wi-Fi protocol is outside this integration's supported hardware.
 
-| Command | Meaning | Evidence |
+| Command | Meaning | Verification |
 |---|---|---|
-| 1 | Gateway child online query | APK + live |
-| 2 | Connect/read an already-bound fountain | APK + live; results in fresh 101 and 110 reports |
-| 101 | Running state and complete settings report | APK + live |
-| 110 | Warning snapshot | APK + live empty all-clear snapshot |
-| 102 | One-shot dispensing | APK + mocked command/ack tests only |
-| 103 | Update setting sections | APK + mocked command/ack tests only |
+| 1 | Query gateway child online state | Static + live |
+| 2 | Connect/read an already-bound fountain | Static + live; produces 101/110 reports |
+| 101 | Running state and settings snapshot | Static + live |
+| 110 | Warning snapshot | Static + live empty all-clear snapshot |
+| 102 | One-shot dispensing | Static + mocked command/ack tests |
+| 103 | Update setting sections | Static + mocked command/ack tests |
 
-Static Dart field-table values resolve setting command `0xf14` to **103**, and dispensing command `0xf0c` to **102**. The app's setting methods preserve section objects such as `autoHeating`, `autoWaterReplenish`, `sensingWater`, `beep`, `childLock`, `exPump`, `remoteDischarge` and `timedWaterDischarge`.
+Current field definitions follow these recovered App 1.2.0 functions:
 
-The device used for verification reports firmware code **10015** and `running.weight.current`, while the older APK also supports `running.waterVolume`. The user confirmed the first value of 81 corresponds to the app's 81 mL display. The production integration client subsequently retrieved a fresh 80 mL reading with fresh all-clear warning data. No real settings or dispensing commands were executed.
+| HA value | Current field / rule | App evidence |
+|---|---|---|
+| Bowl water volume, mL | `running.weight.current` | `getWaterVolumeStr` at `0x9303e8` reads `Running.weight.current`; shared by the Bluetooth fountain page |
+| Water temperature, °C | `running.heating.ntcTemperature` | `getTempStr` at `0x930124` reads `Running.heating.ntcTemperature` |
+| Warning active | Numeric `-1` or `1` | `WaterDeviceWarningInfo.isActive` at `0x937d04` |
+| Self-cleaning | `running.selfClean.status == 1` | `SelfClean.isOn` at `0x9300a8` |
+| Self-clean raw status / times | `running.selfClean.status`, `.times` | `SelfClean` JSON model; times is not interpreted as a lifetime total |
+| Drinking activity | Boolean `running.inDrinkingWater` | `Running.fromJson` accepts a bool, otherwise null |
 
-The app treats a warning value of **-1** as active. The full empty command-110 object observed live means no warnings. This is separate from absence of a warning snapshot, which remains unknown. Water-bowl removal, stale/retained old data and broker disconnects do not become a zero-volume reading.
+Missing or invalid current fields stay unknown. Removed bowls, expired reports and offline devices do not produce a zero-volume reading. A complete empty 110 object is confirmed all-clear; no warning snapshot is unknown. The optional low-water binary sensor has a configurable threshold and recovery margin. Notifications remain the user's HA automations.
 
-For command acknowledgments, matching request ID, expected command, device scope, non-retained delivery, freshness and success code 200 are all required. A timeout is an uncertain result and is never retried automatically. After a success acknowledgment, the integration requests the authoritative state again instead of changing the entity optimistically.
+`WaterDeviceState2._shouldBlockForSelfClean` blocks interactions while self-cleaning. The integration applies this check before sending 102/103, including after acquiring its command lock. State reads remain allowed. The app's standard one-shot command uses the default type 0 and omits `data`, which is unchanged in HA. The additional type 5 wash command and guided self-clean start are not exposed as generic buttons because they have preparation/version checks in the app.
 
-The MQTT client provides HA entities only. Alert routing, thresholds used directly on volume, delays, repeat notifications and quiet hours belong to the user's Home Assistant automations. The optional low-water binary entity also provides a configurable hysteresis threshold.
+Settings retain the reported fields of their section, including `autoHeating`, `autoWaterReplenish`, `sensingWater`, `beep`, `childLock`, `exPump`, `remoteDischarge`, and `timedWaterDischarge`. Commands require fresh state and matching, non-retained, successful acknowledgments. A timed-out physical action is never retried automatically. No live dispensing, heating, self-clean start or setting changes were performed to validate this release.
+
+Other App 1.2.0 endpoints handle standalone hardware, pet/account edits, binding, firmware updates, feedback, and analysis. They are not required for these entities and are not exposed as unverified control actions.

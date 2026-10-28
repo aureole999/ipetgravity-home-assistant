@@ -166,6 +166,12 @@
       },
       "device_last_report": {
         "name": "设备最近上报时间"
+      },
+      "self_clean_status": {
+        "name": "自清洁状态代码"
+      },
+      "self_clean_times": {
+        "name": "自清洁次数"
       }
     },
     "binary_sensor": {
@@ -210,6 +216,12 @@
       },
       "device_online": {
         "name": "设备在线"
+      },
+      "self_clean_active": {
+        "name": "正在自清洁"
+      },
+      "drinking_active": {
+        "name": "正在饮水"
       }
     },
     "switch": {
@@ -365,11 +377,7 @@
           "mqtt_username": "MQTT 用户名",
           "mqtt_password": "MQTT 密码",
           "low_water_threshold": "水碗低水量阈值（mL）",
-          "low_water_hysteresis": "恢复时需增加的水量（mL）",
-          "weight_as_volume": "兼容新固件的称重水量字段"
-        },
-        "data_description": {
-          "weight_as_volume": "新固件返回 weight.current；已与 App 的 mL 显示核对一致。不匹配的固件可以关闭此选项。"
+          "low_water_hysteresis": "恢复时需增加的水量（mL）"
         }
       }
     },

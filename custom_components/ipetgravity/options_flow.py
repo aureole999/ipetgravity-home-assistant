@@ -10,7 +10,6 @@ from .const import (
     CONF_MQTT_ENABLED,
     CONF_MQTT_PASSWORD,
     CONF_MQTT_USERNAME,
-    CONF_WEIGHT_AS_VOLUME,
     DEFAULT_LOW_WATER_HYSTERESIS,
     DEFAULT_LOW_WATER_THRESHOLD,
 )
@@ -60,10 +59,6 @@ class PetGravityOptionsFlow(config_entries.OptionsFlowWithReload):
                             CONF_LOW_WATER_HYSTERESIS, DEFAULT_LOW_WATER_HYSTERESIS
                         ),
                     ): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-                    vol.Required(
-                        CONF_WEIGHT_AS_VOLUME,
-                        default=options.get(CONF_WEIGHT_AS_VOLUME, True),
-                    ): bool,
                 }
             ),
             errors=errors,

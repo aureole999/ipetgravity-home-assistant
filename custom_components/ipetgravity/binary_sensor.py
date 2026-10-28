@@ -20,6 +20,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
             PetGravityBinarySensor(entry, "bowl_low"),
             PetGravityBinarySensor(entry, "bowl_present"),
             PetGravityBinarySensor(entry, "heating_active"),
+            PetGravityBinarySensor(entry, "self_clean_active"),
+            PetGravityBinarySensor(entry, "drinking_active"),
             *(PetGravityBinarySensor(entry, key) for key in WARNING_KEYS),
         ]
     )
@@ -61,6 +63,11 @@ class PetGravityBinarySensor(PetGravityMqttEntity, BinarySensorEntity):
             )
         if self.key == "bowl_low":
             return self.coordinator.bowl_low
+        if self.key == "self_clean_active":
+            return self.coordinator.self_clean_active
+        if self.key == "drinking_active":
+            value = self.coordinator.data.running.get("inDrinkingWater")
+            return value if isinstance(value, bool) else None
         if self.key == "bowl_present":
             value = self.coordinator.data.running.get("waterBasinIsDetected")
             return value if isinstance(value, bool) else None

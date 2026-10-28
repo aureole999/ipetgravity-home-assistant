@@ -56,6 +56,9 @@ def packet(hub, command=101, data=None, **updates):
                 "waterBasinIsDetected": True,
                 "batterPowerPercent": 78,
                 "heating": {"ntcTemperature": 21},
+                "waterTemperature": 99,
+                "selfClean": {"status": 0, "times": 0},
+                "inDrinkingWater": False,
             },
             "setting": {
                 "autoHeating": {"enable": False, "target": 15},
@@ -94,7 +97,7 @@ def test_bowl_compatibility_hysteresis_and_removal(hub):
         assert hub.bowl_low is expected
     p["data"]["running"]["waterVolume"] = 42
     accept(hub, p)
-    assert hub.bowl_volume() == 42
+    assert hub.bowl_volume() == 0
     p["data"]["running"]["waterBasinIsDetected"] = False
     accept(hub, p)
     assert hub.bowl_low is None
@@ -107,7 +110,7 @@ def test_warning_states_and_empty_all_clear(hub):
     )
     assert hub.warning("cleanWaterLow") is True
     assert hub.warning("wasteTankFull") is True
-    assert hub.warning("lowBattery") is False
+    assert hub.warning("lowBattery") is True
     accept(hub, packet(hub, 110, {}))
     assert hub.warning("cleanWaterLow") is False
 
@@ -216,6 +219,10 @@ async def test_real_ha_entities_and_options(hass, live_entry, client):
 
     assert state("sensor", "bowl_volume").state == "81"
     assert state("sensor", "bowl_volume").attributes["unit_of_measurement"] == "mL"
+    assert state("sensor", "water_temperature").state == "21"
+    assert state("sensor", "self_clean_times").state == "0"
+    assert state("binary_sensor", "self_clean_active").state == "off"
+    assert state("binary_sensor", "drinking_active").state == "off"
     assert state("binary_sensor", "cleanWaterLow").state == "off"
     assert state("binary_sensor", "bowl_low").state == "off"
     assert state("number", "config_heating_target").state == "15"
@@ -297,12 +304,56 @@ def test_invalid_numeric_values():
     assert number(0) == 0
 
 
-def test_old_volume_firmware_without_bowl_detection_flag(hub):
+def test_legacy_volume_is_not_used(hub):
     p = packet(hub)
     p["data"]["running"] = {"waterVolume": 40}
     accept(hub, p)
-    assert hub.bowl_volume() == 40
-    assert hub.bowl_low is True
+    assert hub.bowl_volume() is None
+    assert hub.bowl_low is None
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (-1, True),
+        (1, True),
+        (0, False),
+        (2, False),
+        (None, False),
+        (True, None),
+        ("1", None),
+    ],
+)
+def test_new_app_warning_semantics(hub, value, expected):
+    accept(hub, packet(hub, 110, {"cleanWaterLow": value}))
+    assert hub.warning("cleanWaterLow") is expected
+
+
+@pytest.mark.parametrize("value", [None, -1, True, "81", float("nan")])
+def test_invalid_new_volume_never_uses_legacy_value(hub, value):
+    p = packet(hub)
+    p["data"]["running"]["weight"]["current"] = value
+    p["data"]["running"]["waterVolume"] = 42
+    accept(hub, p)
+    assert hub.bowl_volume() is None and hub.bowl_low is None
+
+
+@pytest.mark.parametrize("command", [102, 103])
+async def test_self_clean_blocks_controls_without_publishing(hub, command):
+    p = packet(hub)
+    p["data"]["running"]["selfClean"]["status"] = 1
+    accept(hub, p)
+    assert hub.self_clean_active is True
+    with pytest.raises(HomeAssistantError, match="self-cleaning"):
+        await hub.async_command(command)
+    hub._client.publish.assert_not_called()
+
+
+def test_missing_self_clean_status_is_unknown(hub):
+    p = packet(hub)
+    p["data"]["running"].pop("selfClean")
+    accept(hub, p)
+    assert hub.self_clean_active is None
 
 
 async def test_ack_disconnect_and_shutdown_cleanup(hub):
@@ -349,7 +400,6 @@ async def test_mqtt_credentials_required_in_options(hass, live_entry, client):
             "mqtt_password": "",
             "low_water_threshold": 50,
             "low_water_hysteresis": 20,
-            "weight_as_volume": True,
         },
     )
     assert result["errors"] == {"base": "mqtt_credentials_required"}

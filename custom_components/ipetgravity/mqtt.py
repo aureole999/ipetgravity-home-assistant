@@ -27,7 +27,6 @@ from .const import (
     CONF_MQTT_PASSWORD,
     CONF_MQTT_USERNAME,
     CONF_WATER_DEVICE_MAC,
-    CONF_WEIGHT_AS_VOLUME,
     DEFAULT_LOW_WATER_HYSTERESIS,
     DEFAULT_LOW_WATER_THRESHOLD,
     DOMAIN,
@@ -338,19 +337,17 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             or self.warning("scaleTankNotInstalled") is True
         ):
             return None
-        value = number(self.data.running.get("waterVolume"))
-        if value is None and self.entry.options.get(CONF_WEIGHT_AS_VOLUME, True):
-            value = number(nested(self.data.running, "weight", "current"))
+        value = number(nested(self.data.running, "weight", "current"))
         return value if value is not None and value >= 0 else None
 
     def warning(self, key: str) -> bool | None:
         if not self.fresh(warning=True) or self.data.warnings is None:
             return None
-        # The app adds a warning when its value is -1. A full empty 110 snapshot
+        # App 1.2.0 accepts both -1 and 1. A full empty 110 snapshot
         # is the gateway's confirmed no-warning response (observed live).
         value = self.data.warnings.get(key)
         return (
-            value == -1
+            value in (-1, 1)
             if type(value) in (int, float)
             else False
             if value is None
@@ -393,6 +390,12 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
         if command not in (102, 103) or not self.fresh():
             raise HomeAssistantError("Fresh PetGravity device state is required")
         async with self._command_lock:
+            if not self.fresh():
+                raise HomeAssistantError("Fresh PetGravity device state is required")
+            if self.self_clean_active is True:
+                raise HomeAssistantError(
+                    "PetGravity is self-cleaning; wait until it finishes"
+                )
             request_id = uuid4().hex
             future = self.hass.loop.create_future()
             self._pending[request_id] = (command, future)
@@ -407,6 +410,12 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             finally:
                 self._pending.pop(request_id, None)
             self.async_refresh_device()
+
+    @property
+    def self_clean_active(self) -> bool | None:
+        """Follow SelfClean.isOn in app 1.2.0; missing telemetry is unknown."""
+        value = number(nested(self.data.running, "selfClean", "status"))
+        return value == 1 if value is not None else None
 
     async def async_set_setting(self, section: str, key: str, value: Any) -> None:
         """Preserve the other fields in the selected device setting section."""

@@ -37,7 +37,7 @@ class PetGravityRateLimitError(PetGravityError):
 class PetGravityWaterDevice:
     """A PetGravity water fountain behind a gateway."""
 
-    device_id: int
+    device_id: str
     mac: str
     name: str
     gateway_mac: str
@@ -47,9 +47,9 @@ class PetGravityWaterDevice:
 class PetGravityScreen:
     """A PetGravity home/screen with devices."""
 
-    screen_id: int
+    screen_id: str
     name: str
-    gateway_device_id: int | None
+    gateway_device_id: str | None
     gateway_mac: str | None
     water_device: PetGravityWaterDevice | None
 
@@ -116,8 +116,8 @@ class PetGravityClient:
         """Return configured PetGravity screens and their water devices."""
 
         response = await self._async_request(
-            "/device/getScreen",
-            data={},
+            "/device/getScreenV2",
+            method="GET",
             content_type="application/x-www-form-urlencoded",
         )
         screens: list[PetGravityScreen] = []
@@ -128,23 +128,23 @@ class PetGravityClient:
         for screen in data["screens"]:
             if not isinstance(screen, dict):
                 raise PetGravityError("Unexpected PetGravity home data")
-            gateway_device_id: int | None = None
+            gateway_device_id: str | None = None
             gateway_mac: str | None = None
             water_device: PetGravityWaterDevice | None = None
 
             for device in screen.get("devices", []):
                 if not isinstance(device, dict):
                     raise PetGravityError("Unexpected PetGravity device data")
-                if device.get("deviceType") == 1:
-                    gateway_device_id = _as_int(device.get("deviceId"))
+                if device.get("deviceType") == 0:
+                    gateway_device_id = _as_str(device.get("deviceId"))
                     gateway_mac = _as_str(device.get("deviceMac"))
 
                 for child in device.get("children", []):
                     if not isinstance(child, dict):
                         raise PetGravityError("Unexpected PetGravity child device data")
-                    if child.get("deviceType") == 2:
+                    if device.get("deviceType") == 0 and child.get("deviceType") == 1:
                         child_mac = _as_str(child.get("deviceMac"))
-                        child_id = _as_int(child.get("deviceId"))
+                        child_id = _as_str(child.get("deviceId"))
                         child_name = (
                             _as_str(child.get("deviceName"))
                             or "PetGravity Water Fountain"
@@ -160,14 +160,14 @@ class PetGravityClient:
                                 gateway_mac=child_gateway_mac,
                             )
 
-            screen_id = _as_int(screen.get("id"))
+            screen_id = _as_str(screen.get("sceneId"))
             if screen_id is None:
                 continue
 
             screens.append(
                 PetGravityScreen(
                     screen_id=screen_id,
-                    name=_as_str(screen.get("name")) or MANUFACTURER,
+                    name=_as_str(screen.get("sceneName")) or MANUFACTURER,
                     gateway_device_id=gateway_device_id,
                     gateway_mac=gateway_mac,
                     water_device=water_device,
@@ -178,7 +178,7 @@ class PetGravityClient:
 
     async def async_get_daily_statistics(
         self,
-        screen_id: int,
+        screen_id: str,
         target_date: dt.date,
     ) -> dict[str, Any]:
         """Return daily chart/statistics for one screen."""
@@ -187,7 +187,7 @@ class PetGravityClient:
             "/device/water/drinkWaterDataStatistics",
             json_data={
                 "endTime": "",
-                "screenId": screen_id,
+                "sceneId": str(screen_id),
                 "startTime": target_date.isoformat(),
                 "type": "DAY",
                 "rfid": "",
@@ -197,25 +197,27 @@ class PetGravityClient:
 
     async def async_get_daily_events(
         self,
-        screen_id: int,
+        screen_id: str,
         target_date: dt.date,
     ) -> dict[str, Any]:
         """Return individual drinking events for one screen and day."""
 
         return await self._async_request(
-            "/device/water/targetDayDrinkData",
-            data={
+            "/device/water/targetDayDrinkDataV2",
+            method="GET",
+            params={
                 "time": target_date.isoformat(),
-                "targetScreenId": screen_id,
+                "sceneId": str(screen_id),
             },
             content_type="application/x-www-form-urlencoded",
         )
 
-    async def async_get_device_statistics(self, device_id: int) -> dict[str, Any]:
+    async def async_get_device_statistics(self, device_id: str) -> dict[str, Any]:
         """Return today's per-device drinking, pump and refill totals."""
         return await self._async_request(
-            "/device/water/todayWaterDeviceData",
-            data={"deviceId": device_id},
+            "/device/water/todayWaterDeviceDataV2",
+            method="GET",
+            params={"deviceId": str(device_id)},
             content_type="application/x-www-form-urlencoded",
         )
 
@@ -224,31 +226,41 @@ class PetGravityClient:
     ) -> dict[str, Any]:
         """Return device operations for one day, separate from drinking events."""
         return await self._async_request(
-            "/device/getDeviceEventList",
-            data={"mac": mac, "time": target_date.isoformat()},
-            content_type="application/x-www-form-urlencoded",
+            "/device/getDeviceEventListV2",
+            json_data={"mac": mac, "time": target_date.isoformat()},
+            content_type="application/json",
         )
 
     async def async_get_drinking_history(
-        self, screen_id: int, start_date: dt.date, end_date: dt.date
+        self, screen_id: str, start_date: dt.date, end_date: dt.date
     ) -> dict[str, Any]:
-        """Return daily summaries over a date range (app type 1)."""
-        return await self._async_request(
-            "/device/water/targetTimeDrinkData",
-            data={
-                "targetScreenId": screen_id,
-                "startTime": start_date.isoformat(),
-                "endTime": end_date.isoformat(),
-                "type": 1,
-            },
-            content_type="application/x-www-form-urlencoded",
-        )
+        """Build daily summaries with the current app's DAY statistics API."""
+        if not 0 <= (end_date - start_date).days <= 30:
+            raise ValueError("Choose a date range of 1 to 31 days")
+        summaries = []
+        for offset in range((end_date - start_date).days + 1):
+            day = start_date + dt.timedelta(days=offset)
+            response = await self.async_get_daily_statistics(screen_id, day)
+            rows = response.get("data")
+            if not isinstance(rows, list):
+                raise PetGravityError("Unexpected PetGravity daily statistics")
+            totals = [row for row in rows if isinstance(row, dict)]
+            summaries.append(
+                {
+                    "time": day.isoformat(),
+                    "intake": sum(
+                        _as_int(row.get("drinkMilliliters")) or 0 for row in totals
+                    ),
+                    "bout": sum(_as_int(row.get("drinkNum")) or 0 for row in totals),
+                }
+            )
+        return {"code": 200, "data": summaries}
 
-    async def async_get_pet_targets(self, screen_id: int) -> dict[str, Any]:
+    async def async_get_pet_targets(self, screen_id: str) -> dict[str, Any]:
         """Return the home's pets and their drinking targets."""
         return await self._async_request(
             "/pet/getPetTargetInfo",
-            data={"screenId": screen_id},
+            data={"sceneId": str(screen_id)},
             content_type="application/x-www-form-urlencoded",
         )
 
@@ -257,6 +269,8 @@ class PetGravityClient:
         path: str,
         *,
         content_type: str,
+        method: str = "POST",
+        params: dict[str, Any] | None = None,
         data: dict[str, Any] | None = None,
         json_data: dict[str, Any] | None = None,
         authenticated: bool = True,
@@ -265,23 +279,23 @@ class PetGravityClient:
 
         headers = {
             "User-Agent": "Dart/3.9 (dart:io)",
-            "buildnumber": "1",
-            "os": "ios",
+            "buildnumber": "20",
+            "os": "android",
             "content-type": content_type,
-            "device-model": "iPhone18,1",
             "language": "zh",
-            "os-version": "26.6",
             "app-package": "com.petgravity.app",
-            "app-version": "1.1.2",
+            "app-version": "1.2.0",
         }
         if authenticated:
             headers["token"] = self._token
 
         try:
             async with asyncio.timeout(REQUEST_TIMEOUT):
-                async with self._session.post(
+                async with self._session.request(
+                    method,
                     f"{BASE_URL}{path}",
                     headers=headers,
+                    params=params,
                     data=data,
                     json=json_data,
                     allow_redirects=False,
@@ -324,7 +338,7 @@ class PetGravityClient:
 def _as_int(value: Any) -> int | None:
     """Return value as int when possible."""
 
-    if isinstance(value, int):
+    if type(value) is int:
         return value
     if isinstance(value, str) and value.isdecimal():
         return int(value)

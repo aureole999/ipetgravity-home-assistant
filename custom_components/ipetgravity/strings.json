@@ -166,6 +166,12 @@
       },
       "device_last_report": {
         "name": "Last device report"
+      },
+      "self_clean_status": {
+        "name": "Self-clean status code"
+      },
+      "self_clean_times": {
+        "name": "Self-clean times"
       }
     },
     "binary_sensor": {
@@ -210,6 +216,12 @@
       },
       "device_online": {
         "name": "Device online"
+      },
+      "self_clean_active": {
+        "name": "Self-cleaning"
+      },
+      "drinking_active": {
+        "name": "Drinking"
       }
     },
     "switch": {
@@ -365,11 +377,7 @@
           "mqtt_username": "MQTT username",
           "mqtt_password": "MQTT password",
           "low_water_threshold": "Low bowl volume threshold (mL)",
-          "low_water_hysteresis": "Recovery hysteresis (mL)",
-          "weight_as_volume": "Use the new firmware weighing field for volume"
-        },
-        "data_description": {
-          "weight_as_volume": "New firmware reports weight.current, verified against the app water-volume display. Disable if your firmware uses a different meaning."
+          "low_water_hysteresis": "Recovery hysteresis (mL)"
         }
       }
     },

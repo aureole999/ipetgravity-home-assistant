@@ -2,7 +2,7 @@
 
 宠有引力（PetGravity）饮水机的 Home Assistant 自定义集成，可通过 HACS 安装。
 
-支持 **手机号＋短信验证码** 和 **已有 token** 两种登录方式。接口来自 iOS 抓包，并与 Android App 1.0.7 对照验证。
+支持 **手机号＋短信验证码** 和 **已有 token** 两种登录方式。HTTP 接口与实时字段已按 Android App **1.2.0** 核对，使用新版 V2 设备列表与统计接口。
 
 ## Features
 
@@ -14,7 +14,7 @@
 - Cloud polling via `DataUpdateCoordinator`.
 - Supports reauthentication when PetGravity rejects the token.
 - Reauthentication and reconfiguration offer both login methods and preserve the existing home and entity IDs.
-- Existing 0.1.x entries discover the device ID automatically after upgrading.
+- Existing entries discover the new scene/device IDs by fountain MAC after upgrading; Home Assistant entity IDs and their history are preserved.
 
 ## Entities
 
@@ -32,7 +32,7 @@
 
 These 16 HTTP sensors remain available. The original daily drinking totals are home-level statistics; the device totals refer to the configured fountain. The app displays `*TimeTotal` fields as **counts**, not seconds.
 
-## MQTT 实时状态与控制（0.3.0）
+## MQTT 实时状态与控制
 
 不需要安装本地 MQTT broker，也不需要修改 HA 中已有的 MQTT 集成。PetGravity 直接连接厂商 MQTT 服务，只订阅通过账号发现的网关和饮水机。
 
@@ -42,14 +42,16 @@ These 16 HTTP sensors remain available. The original daily drinking totals are h
 |---|---|
 | 水量 | 水碗水量（mL）、水碗水量不足、水碗是否安装 |
 | 水箱与故障 | 净水箱缺水、污水箱满、两个水箱未安装、水碗未安装、加热故障、称重故障、倾倒故障、低电量告警 |
-| 其它状态 | MQTT 连接、设备在线、最近上报时间、电量、充电状态、温度、加热功率、出水及外接水泵状态 |
+| 其它状态 | MQTT 连接、设备在线、最近上报时间、电量、充电状态、温度、加热功率、出水及外接水泵状态、自清洁状态/次数、正在饮水 |
 | 开关 | 自动加热、自动补水、感应出水、提示音、童锁 |
 | 参数 | 目标温度、补水阈值/水量/间隔、感应阈值/水量/间隔、手动出水量、定时与节水模式参数、外接水泵补水/排水时长 |
 | 模式与操作 | 定时模式、外接水泵模式、自定义出水计划、倾倒出水一次、刷新设备状态 |
 
-不同固件上报的字段不同。没有上报的项目不会推测数值；例如加热传感器温度和水温是不同项目，原始状态代码不解释为未经确认的设备状态。
+没有上报的项目显示未知。原始状态代码不解释为未经确认的设备状态；自清洁次数直接显示 `selfClean.times`，不假定它是累计清洁总次数。
 
-水碗水量优先读取旧固件的 `waterVolume`；新固件使用 `weight.current`。本次已与用户 App 的 **81 mL** 显示核对一致，生产客户端又实测取得后续 **80 mL** 更新。若其它固件的字段含义不同，可以在选项中关闭称重字段兼容。
+与新版 App 一致，水碗水量只读取 `running.weight.current`，水温只读取 `running.heating.ntcTemperature`；不再回退到旧字段。原有“加热传感器温度”实体仍保留，与水温使用同一传感器读数。告警值 `-1` 或 `1` 都表示有效告警。新字段缺失时显示未知，不以旧字段或零补齐。
+
+`selfClean.status == 1` 表示正在自清洁。期间出水与修改设置操作会被拒绝，刷新和状态读取继续工作。自清洁启动需要 App 的水箱准备引导，本集成只提供状态读取。
 
 超过 15 分钟的保留消息不会被当成当前状态。15 分钟内没有有效新上报、MQTT 断开或设备明确离线时，实时实体会变为不可用。设备主动上报会立即更新；集成也每 5 分钟使用 App 的查询/已绑定设备连接请求读取状态。移除水碗时水量不会当作 0 mL。
 
@@ -112,7 +114,7 @@ data:
 response_variable: drinking_history
 ```
 
-Each action returns a mapping containing `data`. Historical results are returned on demand; they are not imported into Home Assistant Recorder statistics.
+Each action returns a mapping containing `data`. Historical results are returned on demand; they are not imported into Home Assistant Recorder statistics. A history query makes one request per selected day to the current app's DAY statistics API, up to 31 requests; it does not affect periodic polling.
 
 ## Install
 
@@ -157,7 +159,9 @@ If PetGravity rejects the saved token, Home Assistant starts reauthentication wi
 
 HTTP polling interval is 5 minutes (four read-only requests per update). Failure of MQTT or an extra device-statistics endpoint does not stop the original HTTP drinking sensors.
 
-The current model supports one fountain per PetGravity home. Timestamps returned without an offset are interpreted using Home Assistant's configured timezone; the vendor does not provide a timezone in these responses. The device-totals endpoint always returns the server's current day.
+The current model supports one gateway-connected Bluetooth fountain per PetGravity home. The standalone dual-band Wi-Fi fountain introduced in App 1.2.0 uses another MQTT protocol and is not supported. Timestamps returned without an offset are interpreted using Home Assistant's configured timezone; the vendor does not provide a timezone in these responses. The device-totals endpoint always returns the server's current day.
+
+Version 0.4.0 uses the current app interfaces only, with no legacy endpoint fallback. When upgrading, keep the existing integration entry: its internal `screen_id` remains the Home Assistant identity, while the new `scene_id` and device ID are used for cloud requests. Reauthentication preserves this separation too.
 
 The cloud MQTT connection follows the app's TCP protocol. Its username and password are supplied through integration options, separate from the user's HTTP token; no MQTT credentials are bundled in the public repository, and the HTTP token is never sent to the MQTT broker. Access requires an outbound connection to the vendor on port 1883. Account deletion, unbinding, firmware flashing, weighing calibration and gateway network changes are not exposed as HA actions. See [API findings](docs/api.md).
 
@@ -167,6 +171,6 @@ Tested with Home Assistant `2026.10.4`. Install development dependencies from `r
 
 ## Version
 
-Current version: `0.3.0`
+Current version: `0.4.0`
 
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.

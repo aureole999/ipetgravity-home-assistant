@@ -1,6 +1,7 @@
 """Test both login paths, errors and existing-entry identity protection."""
 
 import base64
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
@@ -170,6 +171,44 @@ async def test_malformed_token(hass, client, token):
 
 async def test_duplicate(hass, entry, client):
     entry.add_to_hass(hass)
+    result = await start(hass, "token")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"token": TOKEN}
+    )
+    assert result["reason"] == "already_configured"
+
+
+@pytest.mark.parametrize("source", [SOURCE_REAUTH, SOURCE_RECONFIGURE])
+async def test_v2_relogin_preserves_original_entity_ids(hass, entry, client, source):
+    from .conftest import SCREEN
+
+    entry.add_to_hass(hass)
+    client.async_get_screens.return_value = [
+        replace(SCREEN, screen_id="SceneOpaqueId001")
+    ]
+    result = await hass.config_entries.flow.async_init(
+        "ipetgravity",
+        context={"source": source, "entry_id": entry.entry_id},
+        data=ENTRY_DATA if source == SOURCE_REAUTH else None,
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "token"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"token": NEW_TOKEN}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert entry.data["screen_id"] == 1 and entry.unique_id == "42:1"
+    assert entry.data["scene_id"] == "SceneOpaqueId001"
+
+
+async def test_v2_discovery_does_not_duplicate_old_entry(hass, entry, client):
+    from .conftest import SCREEN
+
+    entry.add_to_hass(hass)
+    client.async_get_screens.return_value = [
+        replace(SCREEN, screen_id="SceneOpaqueId001")
+    ]
     result = await start(hass, "token")
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"token": TOKEN}
