@@ -51,7 +51,7 @@ SENSOR_DESCRIPTIONS: tuple[PetGravitySensorEntityDescription, ...] = (
         translation_key="today_drink_milliliters",
         native_unit_of_measurement=UNIT_MILLILITERS,
         device_class=SensorDeviceClass.VOLUME,
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=0,
         value_fn=lambda data: data.drink_milliliters,
     ),
@@ -68,7 +68,6 @@ SENSOR_DESCRIPTIONS: tuple[PetGravitySensorEntityDescription, ...] = (
         translation_key="last_drink_milliliters",
         native_unit_of_measurement=UNIT_MILLILITERS,
         device_class=SensorDeviceClass.VOLUME,
-        state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         value_fn=lambda data: _latest_int(data, "intake"),
     ),
@@ -108,7 +107,9 @@ SENSOR_DESCRIPTIONS += tuple(
         native_unit_of_measurement=UNIT_MILLILITERS if volume else None,
         device_class=SensorDeviceClass.VOLUME if volume else None,
         icon="mdi:water" if volume else "mdi:counter",
-        state_class=SensorStateClass.MEASUREMENT,
+        state_class=SensorStateClass.TOTAL_INCREASING
+        if volume
+        else SensorStateClass.MEASUREMENT,
         suggested_display_precision=0,
         source="device_statistics",
         value_fn=lambda data, field=field: _device_number(data, field),
@@ -152,7 +153,7 @@ async def async_setup_entry(
 
 
 LIVE_SENSORS = (
-    ("bowl_volume", None, "mL", SensorDeviceClass.VOLUME),
+    ("bowl_volume", None, "mL", SensorDeviceClass.VOLUME_STORAGE),
     ("bowl_weight_raw", ("weight", "current"), None, None),
     (
         "water_temperature",

@@ -32,6 +32,8 @@
 
 These 16 HTTP sensors remain available. The original daily drinking totals are home-level statistics; the device totals refer to the configured fountain. The app displays `*TimeTotal` fields as **counts**, not seconds.
 
+Daily volume totals use HA's `total_increasing` state class to support daily resets. Last-drink volume is one event, so it has no cumulative statistics class. Live bowl volume uses `volume_storage` with `measurement`, as it measures the water currently held in the bowl. Entity IDs, values and mL units stay the same.
+
 ## MQTT 实时状态与控制
 
 不需要安装本地 MQTT broker，也不需要修改 HA 中已有的 MQTT 集成。PetGravity 直接连接厂商 MQTT 服务，只订阅通过账号发现的网关和饮水机。
@@ -171,6 +173,6 @@ Tested with Home Assistant `2026.10.4`. Install development dependencies from `r
 
 ## Version
 
-Current version: `0.4.0`
+Current version: `0.4.1`
 
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.

@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.ipetgravity.api import (
     PetGravityAuthError,
@@ -34,6 +35,34 @@ async def test_upgrade_and_entities(hass, entry, client):
     assert entry.runtime_data.coordinator.data.latest_event["intake"] == 10
     client.async_get_device_statistics.assert_awaited_once_with(3)
     assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_volume_sensor_classes_do_not_log_ha_validation_warnings(
+    hass, entry, client, caplog
+):
+    await setup(hass, entry)
+    expected = {
+        "today_drink_milliliters": "total_increasing",
+        "device_drink_volume": "total_increasing",
+        "pump_volume": "total_increasing",
+        "pump_pour_out_volume": "total_increasing",
+        "refill_volume": "total_increasing",
+        "sensing_volume": "total_increasing",
+        "last_drink_milliliters": None,
+    }
+    for key, state_class in expected.items():
+        entity_id = er.async_get(hass).async_get_entity_id(
+            "sensor", "ipetgravity", f"1_aabbccddee01_{key}"
+        )
+        state = hass.states.get(entity_id)
+        assert state.attributes["device_class"] == "volume"
+        assert state.attributes["unit_of_measurement"] == "mL"
+        assert state.attributes.get("state_class") == state_class
+    assert not any(
+        record.name == "homeassistant.components.sensor"
+        and "which is impossible considering device class" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 async def test_v2_id_migration_preserves_entity_identity(hass, entry, client):

@@ -196,7 +196,7 @@ async def test_nested_setting_preserves_other_modes(hub):
         assert data["water_saving"] == {"time": 0, "volume": 80} and data["mode"] == 1
 
 
-async def test_real_ha_entities_and_options(hass, live_entry, client):
+async def test_real_ha_entities_and_options(hass, live_entry, client, caplog):
     async def fake_start(hub):
         hub.connected = True
         hub._client = MagicMock()
@@ -219,6 +219,13 @@ async def test_real_ha_entities_and_options(hass, live_entry, client):
 
     assert state("sensor", "bowl_volume").state == "81"
     assert state("sensor", "bowl_volume").attributes["unit_of_measurement"] == "mL"
+    assert state("sensor", "bowl_volume").attributes["device_class"] == "volume_storage"
+    assert state("sensor", "bowl_volume").attributes["state_class"] == "measurement"
+    assert not any(
+        record.name == "homeassistant.components.sensor"
+        and "which is impossible considering device class" in record.getMessage()
+        for record in caplog.records
+    )
     assert state("sensor", "water_temperature").state == "21"
     assert state("sensor", "self_clean_times").state == "0"
     assert state("binary_sensor", "self_clean_active").state == "off"
