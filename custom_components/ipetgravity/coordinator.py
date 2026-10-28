@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 import datetime as dt
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +15,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .api import PetGravityAuthError, PetGravityClient, PetGravityError
-from .const import CONF_SCAN_INTERVAL, CONF_SCREEN_ID, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_SCAN_INTERVAL,
+    CONF_SCREEN_ID,
+    CONF_WATER_DEVICE_ID,
+    CONF_WATER_DEVICE_MAC,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +36,8 @@ class PetGravityDailyData:
     drink_num: int | None
     hourly: list[dict[str, Any]]
     events: list[dict[str, Any]]
+    device_statistics: dict[str, Any] | None = None
+    device_events: list[dict[str, Any]] | None = None
 
     @property
     def latest_event(self) -> dict[str, Any] | None:
@@ -37,6 +46,13 @@ class PetGravityDailyData:
         if not self.events:
             return None
         return max(self.events, key=lambda event: event.get("time", ""))
+
+    @property
+    def latest_device_event(self) -> dict[str, Any] | None:
+        """Return the last operation, not the last drinking session."""
+        if not self.device_events:
+            return None
+        return max(self.device_events, key=lambda event: event.get("time", ""))
 
 
 class PetGravityDataUpdateCoordinator(DataUpdateCoordinator[PetGravityDailyData]):
@@ -63,24 +79,70 @@ class PetGravityDataUpdateCoordinator(DataUpdateCoordinator[PetGravityDailyData]
         )
         self.client = client
         self.screen_id = int(entry.data[CONF_SCREEN_ID])
+        self.water_mac = entry.data[CONF_WATER_DEVICE_MAC]
+        self.device_id: int | None = entry.data.get(CONF_WATER_DEVICE_ID)
+        self._optional_failures: set[str] = set()
+
+    async def _async_setup(self) -> None:
+        """Discover the device ID for existing 0.1.x entries without re-adding."""
+        if self.device_id is not None:
+            return
+        try:
+            screens = await self.client.async_get_screens()
+        except PetGravityAuthError as err:
+            raise ConfigEntryAuthFailed("PetGravity token was rejected") from err
+        except PetGravityError as err:
+            raise UpdateFailed(str(err)) from err
+        for screen in screens:
+            water = screen.water_device
+            if (
+                screen.screen_id == self.screen_id
+                and water is not None
+                and water.mac.lower() == self.water_mac.lower()
+            ):
+                self.device_id = water.device_id
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data={
+                        **self.config_entry.data,
+                        CONF_WATER_DEVICE_ID: water.device_id,
+                    },
+                )
+                return
+        raise UpdateFailed("The configured water fountain was not found")
 
     async def _async_update_data(self) -> PetGravityDailyData:
         """Fetch latest daily drinking data."""
 
         target_date = dt_util.now().date()
+        assert self.device_id is not None
 
         try:
-            stats_response, events_response = await asyncio.gather(
+            results = await asyncio.gather(
                 self.client.async_get_daily_statistics(self.screen_id, target_date),
                 self.client.async_get_daily_events(self.screen_id, target_date),
+                self.client.async_get_device_statistics(self.device_id),
+                self.client.async_get_device_events(self.water_mac, target_date),
+                return_exceptions=True,
             )
+            for result in results:
+                if isinstance(result, PetGravityAuthError):
+                    raise result
+            for result in results[:2]:
+                if isinstance(result, BaseException):
+                    raise result
         except PetGravityAuthError as err:
-            raise ConfigEntryAuthFailed("PetGravity token is invalid or expired") from err
+            raise ConfigEntryAuthFailed(
+                "PetGravity token is invalid or expired"
+            ) from err
         except PetGravityError as err:
             raise UpdateFailed(str(err)) from err
 
+        stats_response, events_response = results[:2]
         stats = _first_item(stats_response.get("data"))
         events = events_response.get("data")
+        device_stats = self._optional_data("device statistics", results[2])
+        device_events = self._optional_data("device events", results[3])
 
         return PetGravityDailyData(
             date=target_date,
@@ -88,7 +150,23 @@ class PetGravityDataUpdateCoordinator(DataUpdateCoordinator[PetGravityDailyData]
             drink_num=_as_int(stats.get("drinkNum")),
             hourly=stats.get("data") if isinstance(stats.get("data"), list) else [],
             events=events if isinstance(events, list) else [],
+            device_statistics=device_stats if isinstance(device_stats, dict) else None,
+            device_events=device_events if isinstance(device_events, list) else None,
         )
+
+    def _optional_data(self, name: str, response: Any) -> Any:
+        """Keep original drinking entities working if an extra endpoint fails."""
+        if isinstance(response, PetGravityError):
+            if name not in self._optional_failures:
+                LOGGER.warning(
+                    "PetGravity %s is unavailable; will retry on next update", name
+                )
+                self._optional_failures.add(name)
+            return None
+        if isinstance(response, BaseException):
+            raise response
+        self._optional_failures.discard(name)
+        return response.get("data")
 
 
 def _first_item(value: Any) -> dict[str, Any]:

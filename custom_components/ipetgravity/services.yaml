@@ -1,0 +1,33 @@
+get_drinking_history:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: ipetgravity
+    start_date:
+      required: true
+      selector:
+        date:
+    end_date:
+      required: true
+      selector:
+        date:
+get_device_events:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: ipetgravity
+    date:
+      required: true
+      selector:
+        date:
+get_pet_targets:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: ipetgravity

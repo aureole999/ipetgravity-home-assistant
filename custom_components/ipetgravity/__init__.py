@@ -8,10 +8,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import PetGravityClient
 from .const import CONF_TOKEN
 from .coordinator import PetGravityDataUpdateCoordinator
+from .services import async_setup_services
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -25,6 +27,12 @@ class PetGravityRuntimeData:
 
 
 type PetGravityConfigEntry = ConfigEntry[PetGravityRuntimeData]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Expose read-only actions even when an entry is temporarily unloaded."""
+    async_setup_services(hass)
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: PetGravityConfigEntry) -> bool:

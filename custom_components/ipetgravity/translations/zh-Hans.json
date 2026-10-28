@@ -4,12 +4,9 @@
     "step": {
       "user": {
         "title": "连接宠有引力",
-        "description": "输入从宠有引力 App 请求头里抓到的 token。",
-        "data": {
-          "token": "Token"
-        },
-        "data_description": {
-          "token": "宠有引力 App 请求头中的长期登录 token。"
+        "menu_options": {
+          "token": "使用已有 token",
+          "phone": "手机号＋短信验证码"
         }
       },
       "screen": {
@@ -20,19 +17,46 @@
         }
       },
       "reauth_confirm": {
-        "title": "更新宠有引力 Token",
-        "description": "当前 token 已被宠有引力拒绝。请输入从 App 重新抓到的新 token。",
+        "title": "重新登录",
+        "description": "选择登录方式，请使用原来的账号和家庭。",
+        "menu_options": {
+          "token": "使用已有 token",
+          "phone": "手机号＋短信验证码"
+        }
+      },
+      "reconfigure": {
+        "title": "更新登录凭据",
+        "description": "选择登录方式，请使用原来的账号和家庭。",
+        "menu_options": {
+          "token": "使用已有 token",
+          "phone": "手机号＋短信验证码"
+        }
+      },
+      "token": {
+        "title": "使用 token 登录",
+        "description": "粘贴从宠有引力 App 请求头中获取的 token。",
         "data": {
           "token": "Token"
         }
       },
-      "reconfigure": {
-        "title": "重新配置宠有引力",
-        "description": "更新 token 或选择其他宠有引力家庭。",
+      "phone": {
+        "title": "发送登录验证码",
+        "description": "输入中国大陆手机号（可带 +86）。提交后会发送一条登录验证码短信。",
         "data": {
-          "token": "Token",
-          "screen_id": "家庭"
+          "phone": "手机号"
         }
+      },
+      "sms_code": {
+        "title": "输入短信验证码",
+        "description": "输入六位短信验证码。需要重发时，等待 60 秒，勾选“重新发送验证码”后提交。登录成功后只保存 token。",
+        "data": {
+          "code": "短信验证码",
+          "resend_code": "重新发送验证码"
+        }
+      },
+      "login_complete": {
+        "title": "获取设备列表",
+        "description": "登录已成功。提交后使用已获得的 token 重试获取设备列表。"
       }
     },
     "error": {
@@ -41,11 +65,17 @@
       "invalid_token": "这个 token 看起来不是 JWT。",
       "no_water_fountain": "这个账号下没有找到宠有引力饮水机。",
       "screen_not_found": "这个 token 下找不到所选家庭。",
-      "unknown": "发生未知错误。"
+      "unknown": "发生未知错误。",
+      "invalid_phone": "请输入有效的中国大陆手机号。",
+      "invalid_code": "请输入仍有效的六位短信验证码。",
+      "sms_cooldown": "请等待至少 60 秒后重试；服务器可能要求等待更久。",
+      "sms_failed": "验证码发送失败，请稍后重试或使用 token 登录。",
+      "login_failed": "验证码登录失败，请检查验证码或使用 token 登录。"
     },
     "abort": {
       "already_configured": "这个宠有引力家庭已经配置过了。",
-      "reauth_successful": "宠有引力认证已更新。"
+      "reauth_successful": "宠有引力认证已更新。",
+      "wrong_account": "请使用此集成原先的宠有引力账号和家庭登录。"
     }
   },
   "entity": {
@@ -64,6 +94,80 @@
       },
       "last_drink_time": {
         "name": "最近饮水时间"
+      },
+      "device_drink_volume": {
+        "name": "设备今日饮水量"
+      },
+      "device_drink_count": {
+        "name": "设备今日饮水次数"
+      },
+      "pump_volume": {
+        "name": "今日出水量"
+      },
+      "pump_pour_out_volume": {
+        "name": "今日倾倒出水量"
+      },
+      "pump_count": {
+        "name": "今日出水次数"
+      },
+      "refill_volume": {
+        "name": "今日加水量"
+      },
+      "refill_count": {
+        "name": "今日加水次数"
+      },
+      "sensing_volume": {
+        "name": "今日感应出水量"
+      },
+      "sensing_count": {
+        "name": "今日感应出水次数"
+      },
+      "last_device_event": {
+        "name": "最近设备事件"
+      },
+      "last_device_event_time": {
+        "name": "最近设备事件时间"
+      }
+    }
+  },
+  "services": {
+    "get_drinking_history": {
+      "name": "查询饮水历史",
+      "description": "查询最多 31 天的每日饮水汇总。",
+      "fields": {
+        "config_entry_id": {
+          "name": "宠有引力家庭",
+          "description": "选择已配置的宠有引力集成条目。"
+        },
+        "start_date": {
+          "name": "开始日期"
+        },
+        "end_date": {
+          "name": "结束日期"
+        }
+      }
+    },
+    "get_device_events": {
+      "name": "查询设备事件",
+      "description": "查询指定日期的出水、加水等设备事件。",
+      "fields": {
+        "config_entry_id": {
+          "name": "宠有引力家庭",
+          "description": "选择已配置的宠有引力集成条目。"
+        },
+        "date": {
+          "name": "日期"
+        }
+      }
+    },
+    "get_pet_targets": {
+      "name": "查询宠物饮水目标",
+      "description": "查询家庭中的宠物和饮水目标；未配置宠物时返回空列表。",
+      "fields": {
+        "config_entry_id": {
+          "name": "宠有引力家庭",
+          "description": "选择已配置的宠有引力集成条目。"
+        }
       }
     }
   }

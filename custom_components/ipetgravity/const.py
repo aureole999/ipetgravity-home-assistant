@@ -12,6 +12,10 @@ CONF_SCREEN_NAME = "screen_name"
 CONF_GATEWAY_MAC = "gateway_mac"
 CONF_WATER_DEVICE_MAC = "water_device_mac"
 CONF_WATER_DEVICE_NAME = "water_device_name"
+CONF_WATER_DEVICE_ID = "water_device_id"
+CONF_PHONE = "phone"
+CONF_CODE = "code"
+CONF_RESEND_CODE = "resend_code"
 CONF_SCAN_INTERVAL = "scan_interval"
 
 DEFAULT_SCAN_INTERVAL = 300

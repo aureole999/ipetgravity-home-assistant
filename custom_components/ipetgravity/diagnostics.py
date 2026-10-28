@@ -9,9 +9,21 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import PetGravityConfigEntry
-from .const import CONF_TOKEN
+from .const import CONF_GATEWAY_MAC, CONF_TOKEN, CONF_WATER_DEVICE_MAC
 
-TO_REDACT = [CONF_TOKEN]
+TO_REDACT = [
+    CONF_TOKEN,
+    "phone",
+    "code",
+    CONF_GATEWAY_MAC,
+    CONF_WATER_DEVICE_MAC,
+    "deviceMac",
+    "gatewayMac",
+    "rfid",
+    "petId",
+    "screenId",
+    "screen_id",
+]
 
 
 async def async_get_config_entry_diagnostics(
@@ -24,5 +36,7 @@ async def async_get_config_entry_diagnostics(
     return {
         "entry": async_redact_data(entry.data, TO_REDACT),
         "last_update_success": coordinator.last_update_success,
-        "data": asdict(coordinator.data) if coordinator.data is not None else None,
+        "data": async_redact_data(asdict(coordinator.data), TO_REDACT)
+        if coordinator.data is not None
+        else None,
     }

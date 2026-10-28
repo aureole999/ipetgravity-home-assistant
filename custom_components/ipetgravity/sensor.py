@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Callable
 from dataclasses import dataclass
-import datetime as dt
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -22,7 +22,6 @@ from homeassistant.util import dt as dt_util
 
 from . import PetGravityConfigEntry
 from .const import (
-    CONF_GATEWAY_MAC,
     CONF_SCREEN_ID,
     CONF_SCREEN_NAME,
     CONF_WATER_DEVICE_MAC,
@@ -40,7 +39,8 @@ UNIT_MILLILITERS = "mL"
 class PetGravitySensorEntityDescription(SensorEntityDescription):
     """Describes a PetGravity sensor."""
 
-    value_fn: Callable[[PetGravityDailyData], int | dt.datetime | None]
+    value_fn: Callable[[PetGravityDailyData], int | float | str | dt.datetime | None]
+    source: str | None = None
 
 
 SENSOR_DESCRIPTIONS: tuple[PetGravitySensorEntityDescription, ...] = (
@@ -87,6 +87,49 @@ SENSOR_DESCRIPTIONS: tuple[PetGravitySensorEntityDescription, ...] = (
     ),
 )
 
+# In the app UI the *TimeTotal fields are displayed with 次 (count), not seconds.
+DEVICE_TOTALS = (
+    ("device_drink_volume", "drinkVolumeTotal", True),
+    ("device_drink_count", "drinkTimeTotal", False),
+    ("pump_volume", "pumpVolumeTotal", True),
+    ("pump_pour_out_volume", "pumpPourOutVolumeTotal", True),
+    ("pump_count", "pumpTimeTotal", False),
+    ("refill_volume", "replVolumeTotal", True),
+    ("refill_count", "replTimeTotal", False),
+    ("sensing_volume", "sensVolumeTotal", True),
+    ("sensing_count", "sensTimeTotal", False),
+)
+SENSOR_DESCRIPTIONS += tuple(
+    PetGravitySensorEntityDescription(
+        key=key,
+        translation_key=key,
+        native_unit_of_measurement=UNIT_MILLILITERS if volume else None,
+        device_class=SensorDeviceClass.VOLUME if volume else None,
+        icon="mdi:water" if volume else "mdi:counter",
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        source="device_statistics",
+        value_fn=lambda data, field=field: _device_number(data, field),
+    )
+    for key, field, volume in DEVICE_TOTALS
+)
+SENSOR_DESCRIPTIONS += (
+    PetGravitySensorEntityDescription(
+        key="last_device_event",
+        translation_key="last_device_event",
+        icon="mdi:history",
+        source="device_events",
+        value_fn=lambda data: _device_event_text(data),
+    ),
+    PetGravitySensorEntityDescription(
+        key="last_device_event_time",
+        translation_key="last_device_event_time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        source="device_events",
+        value_fn=lambda data: _parse_time(data.latest_device_event),
+    ),
+)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -102,7 +145,9 @@ async def async_setup_entry(
     )
 
 
-class PetGravitySensor(CoordinatorEntity[PetGravityDataUpdateCoordinator], SensorEntity):
+class PetGravitySensor(
+    CoordinatorEntity[PetGravityDataUpdateCoordinator], SensorEntity
+):
     """PetGravity sensor entity."""
 
     entity_description: PetGravitySensorEntityDescription
@@ -135,12 +180,20 @@ class PetGravitySensor(CoordinatorEntity[PetGravityDataUpdateCoordinator], Senso
         }
 
     @property
-    def native_value(self) -> int | dt.datetime | None:
+    def native_value(self) -> int | float | str | dt.datetime | None:
         """Return the native sensor value."""
 
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def available(self) -> bool:
+        """Only the extra entities become unavailable if their endpoint fails."""
+        if not super().available:
+            return False
+        source = self.entity_description.source
+        return source is None or getattr(self.coordinator.data, source) is not None
 
 
 def _latest_int(data: PetGravityDailyData, key: str) -> int | None:
@@ -160,7 +213,11 @@ def _latest_int(data: PetGravityDailyData, key: str) -> int | None:
 def _latest_time(data: PetGravityDailyData) -> dt.datetime | None:
     """Return a timezone-aware datetime for the latest drinking event."""
 
-    event = data.latest_event
+    return _parse_time(data.latest_event)
+
+
+def _parse_time(event: dict[str, Any] | None) -> dt.datetime | None:
+    """Interpret the vendor's naive timestamp in the configured HA timezone."""
     if event is None:
         return None
 
@@ -174,3 +231,15 @@ def _latest_time(data: PetGravityDailyData) -> dt.datetime | None:
     if parsed.tzinfo is None:
         return dt_util.as_local(parsed.replace(tzinfo=dt_util.DEFAULT_TIME_ZONE))
     return dt_util.as_local(parsed)
+
+
+def _device_number(data: PetGravityDailyData, field: str) -> int | float | None:
+    value = (data.device_statistics or {}).get(field)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value
+    return None
+
+
+def _device_event_text(data: PetGravityDailyData) -> str | None:
+    value = (data.latest_device_event or {}).get("eventStr")
+    return value[:255] if isinstance(value, str) else None

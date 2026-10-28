@@ -4,12 +4,9 @@
     "step": {
       "user": {
         "title": "Connect PetGravity",
-        "description": "Enter the token captured from the PetGravity app.",
-        "data": {
-          "token": "Token"
-        },
-        "data_description": {
-          "token": "The long-lived token from the PetGravity app request header."
+        "menu_options": {
+          "token": "Use an existing token",
+          "phone": "Phone number and SMS code"
         }
       },
       "screen": {
@@ -20,19 +17,46 @@
         }
       },
       "reauth_confirm": {
-        "title": "Update PetGravity Token",
-        "description": "The PetGravity token was rejected. Enter a fresh token captured from the app.",
+        "title": "Sign in again",
+        "description": "Choose a login method for the same account and home.",
+        "menu_options": {
+          "token": "Use an existing token",
+          "phone": "Phone number and SMS code"
+        }
+      },
+      "reconfigure": {
+        "title": "Update login",
+        "description": "Choose a login method for the same account and home.",
+        "menu_options": {
+          "token": "Use an existing token",
+          "phone": "Phone number and SMS code"
+        }
+      },
+      "token": {
+        "title": "Sign in with token",
+        "description": "Paste the token from a PetGravity app request header.",
         "data": {
           "token": "Token"
         }
       },
-      "reconfigure": {
-        "title": "Reconfigure PetGravity",
-        "description": "Update the token or selected PetGravity home.",
+      "phone": {
+        "title": "Send a login code",
+        "description": "Enter your mainland China mobile number. Submitting sends one SMS. You can include +86.",
         "data": {
-          "token": "Token",
-          "screen_id": "Home"
+          "phone": "Mobile number"
         }
+      },
+      "sms_code": {
+        "title": "Enter the SMS code",
+        "description": "Enter the six-digit code. To resend after 60 seconds, select Resend code and submit. Only the resulting token is saved.",
+        "data": {
+          "code": "SMS code",
+          "resend_code": "Resend code"
+        }
+      },
+      "login_complete": {
+        "title": "Retrieve your devices",
+        "description": "Login succeeded. Submit to retry retrieving your devices with the issued token."
       }
     },
     "error": {
@@ -41,11 +65,17 @@
       "invalid_token": "The token does not look like a JWT.",
       "no_water_fountain": "No PetGravity water fountain was found on this account.",
       "screen_not_found": "The selected home was not found for this token.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "invalid_phone": "Enter a valid mainland China mobile number.",
+      "invalid_code": "The code must be six digits and still valid.",
+      "sms_cooldown": "Please wait at least 60 seconds before trying again. The server may impose a longer limit.",
+      "sms_failed": "Could not send the SMS. Try later or sign in with a token.",
+      "login_failed": "SMS login failed. Check the code, or sign in with a token."
     },
     "abort": {
       "already_configured": "This PetGravity home is already configured.",
-      "reauth_successful": "PetGravity authentication was updated."
+      "reauth_successful": "PetGravity authentication was updated.",
+      "wrong_account": "Use the same PetGravity account and home as the existing entry."
     }
   },
   "entity": {
@@ -64,6 +94,80 @@
       },
       "last_drink_time": {
         "name": "Last drinking time"
+      },
+      "device_drink_volume": {
+        "name": "Device today drinking volume"
+      },
+      "device_drink_count": {
+        "name": "Device today drinking count"
+      },
+      "pump_volume": {
+        "name": "Today dispensed volume"
+      },
+      "pump_pour_out_volume": {
+        "name": "Today pour-out volume"
+      },
+      "pump_count": {
+        "name": "Today dispensing count"
+      },
+      "refill_volume": {
+        "name": "Today refill volume"
+      },
+      "refill_count": {
+        "name": "Today refill count"
+      },
+      "sensing_volume": {
+        "name": "Today sensing dispense volume"
+      },
+      "sensing_count": {
+        "name": "Today sensing dispense count"
+      },
+      "last_device_event": {
+        "name": "Last device event"
+      },
+      "last_device_event_time": {
+        "name": "Last device event time"
+      }
+    }
+  },
+  "services": {
+    "get_drinking_history": {
+      "name": "Get drinking history",
+      "description": "Return daily summaries for a range of up to 31 days.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PetGravity home",
+          "description": "Select a configured PetGravity integration entry."
+        },
+        "start_date": {
+          "name": "Start date"
+        },
+        "end_date": {
+          "name": "End date"
+        }
+      }
+    },
+    "get_device_events": {
+      "name": "Get device events",
+      "description": "Return device operations for the selected day.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PetGravity home",
+          "description": "Select a configured PetGravity integration entry."
+        },
+        "date": {
+          "name": "Date"
+        }
+      }
+    },
+    "get_pet_targets": {
+      "name": "Get pet drinking targets",
+      "description": "Return pets and drinking targets for the selected home.",
+      "fields": {
+        "config_entry_id": {
+          "name": "PetGravity home",
+          "description": "Select a configured PetGravity integration entry."
+        }
       }
     }
   }
