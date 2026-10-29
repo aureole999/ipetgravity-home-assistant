@@ -32,7 +32,9 @@
 
 These 16 HTTP sensors remain available. The original daily drinking totals are home-level statistics; the device totals refer to the configured fountain. The app displays `*TimeTotal` fields as **counts**, not seconds.
 
-Daily volume totals use HA's `total_increasing` state class to support daily resets. Last-drink volume is one event, so it has no cumulative statistics class. Live bowl volume uses `volume_storage` with `measurement`, as it measures the water currently held in the bowl. Entity IDs, values and mL units stay the same.
+Daily volume totals use HA's `total_increasing` state class to support daily resets. Last-drink volume is the latest individual reading: it uses `measurement` with mL and no cumulative `volume` device class. This preserves its existing mean/min/max statistics; those statistics describe the retained latest readings over time, not a sum of drinking sessions. Live bowl volume uses `volume_storage` with `measurement`, as it measures the water currently held in the bowl. Entity IDs, values and mL units stay the same.
+
+If 0.4.1 or 0.4.2 raised “state class removed” for last-drink volume, **do not delete its long-term statistics**. Update to 0.4.3 and restart HA. The restored state class matches the existing measurement statistics; HA can clear the repair on its next statistics validation. Data already deleted cannot be recovered by this update, and the update does not backfill the recording gap.
 
 ## MQTT 实时状态与控制
 
@@ -177,6 +179,6 @@ Tested with Home Assistant `2026.10.4`. Install development dependencies from `r
 
 ## Version
 
-Current version: `0.4.2`
+Current version: `0.4.3`
 
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.

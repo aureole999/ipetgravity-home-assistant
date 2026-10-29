@@ -1,9 +1,13 @@
 """Load real HA entities, upgrade old entries, and exercise read-only actions."""
 
 import datetime as dt
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
+from homeassistant.components.recorder.models import StatisticMeanType
+from homeassistant.components.sensor import recorder as sensor_recorder
+from homeassistant.core import State
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 
@@ -48,7 +52,6 @@ async def test_volume_sensor_classes_do_not_log_ha_validation_warnings(
         "pump_pour_out_volume": "total_increasing",
         "refill_volume": "total_increasing",
         "sensing_volume": "total_increasing",
-        "last_drink_milliliters": None,
     }
     for key, state_class in expected.items():
         entity_id = er.async_get(hass).async_get_entity_id(
@@ -58,11 +61,62 @@ async def test_volume_sensor_classes_do_not_log_ha_validation_warnings(
         assert state.attributes["device_class"] == "volume"
         assert state.attributes["unit_of_measurement"] == "mL"
         assert state.attributes.get("state_class") == state_class
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", "ipetgravity", "1_aabbccddee01_last_drink_milliliters"
+    )
+    state = hass.states.get(entity_id)
+    assert state.attributes.get("device_class") is None
+    assert state.attributes["state_class"] == "measurement"
+    assert state.attributes["unit_of_measurement"] == "mL"
     assert not any(
         record.name == "homeassistant.components.sensor"
         and "which is impossible considering device class" in record.getMessage()
         for record in caplog.records
     )
+
+
+async def test_last_drink_reuses_existing_measurement_statistics(hass, entry, client):
+    await setup(hass, entry)
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "sensor", "ipetgravity", "1_aabbccddee01_last_drink_milliliters"
+    )
+    state = hass.states.get(entity_id)
+    metadata = {
+        entity_id: (
+            1,
+            {
+                "mean_type": StatisticMeanType.ARITHMETIC,
+                "has_sum": False,
+                "name": None,
+                "source": "recorder",
+                "statistic_id": entity_id,
+                "unit_class": "volume",
+                "unit_of_measurement": "mL",
+            },
+        )
+    }
+    original = deepcopy(metadata)
+    issues = []
+
+    def report(issue_type, statistic_id, data):
+        issues.append((issue_type, statistic_id))
+
+    # Reproduce the repair raised by 0.4.1/0.4.2 before checking the fix.
+    old_attributes = {**state.attributes, "device_class": "volume"}
+    old_attributes.pop("state_class")
+    old_state = State(entity_id, state.state, old_attributes)
+    sensor_recorder._update_issues(report, [old_state], metadata, {})
+    assert issues == [("state_class_removed", entity_id)]
+    issues.clear()
+    sensor_recorder._update_issues(report, [state], metadata, {})
+    assert issues == []
+    samples = [(float(state.state), state)]
+    unit_class, unit, normalized = sensor_recorder._normalize_states(
+        hass, metadata, samples, entity_id, None
+    )
+    assert (unit_class, unit) == ("volume", "mL")
+    assert normalized == samples
+    assert metadata == original
 
 
 async def test_v2_id_migration_preserves_entity_identity(hass, entry, client):
