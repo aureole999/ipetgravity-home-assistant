@@ -267,9 +267,12 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             and fresh
             and payload.get("commandId") == pending_item[0]
         ):
-            if payload.get("code") == 200:
+            # App 1.2.0 MqttCommand.isRespSuccess accepts numeric 0 and 200.
+            # HTTP and unsolicited telemetry still require their own 200 code.
+            code = number(payload.get("code"))
+            if code in (0, 200):
                 pending.set_result(payload)
-            elif payload.get("code") not in (0, None):
+            elif payload.get("code") is not None:
                 pending.set_exception(
                     HomeAssistantError("PetGravity rejected the device command")
                 )

@@ -78,4 +78,10 @@ Read-only production-client verification on 2026-10-29 received command-3 firmwa
 
 Settings retain the reported fields of their section, including `autoHeating`, `autoWaterReplenish`, `sensingWater`, `beep`, `childLock`, `exPump`, `remoteDischarge`, and `timedWaterDischarge`. Commands require fresh state and matching, non-retained, successful acknowledgments. A timed-out physical action is never retried automatically. No live dispensing, heating, self-clean start or setting changes were performed to validate this release.
 
+## MQTT control success codes (0.4.4)
+
+App 1.2.0 `MqttCommand.isRespSuccess` at `0x926b18` explicitly accepts a numeric response code of **200 or 0**. The previous integration accepted only 200 and ignored 0, so a valid zero-code acknowledgment could leave a completed physical action waiting until the 20-second timeout. Version 0.4.4 accepts both success codes for a matched active control request. Booleans and numeric-looking strings are not accepted as success codes. Request ID, expected command, gateway/device scope, timestamp freshness and non-retained delivery remain required. HTTP responses and unsolicited MQTT telemetry retain their existing 200-only validation.
+
+HA logs on 2026-10-30 showed a normal dispensing button press at 14:00:26 followed by an acknowledgment timeout at 14:00:46 (Asia/Tokyo). These logs do not contain the original MQTT reply, so its actual code cannot be confirmed retrospectively. The zero-code incompatibility was independently reproduced in regression tests and checked against the APK. Both HA button service paths and settings commands are covered; no additional physical operation was performed while diagnosing this report.
+
 Other App 1.2.0 endpoints handle standalone hardware, pet/account edits, binding, firmware updates, feedback, and analysis. They are not required for these entities and are not exposed as unverified control actions.

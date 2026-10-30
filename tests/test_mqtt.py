@@ -240,7 +240,8 @@ def test_out_of_order_and_offline(hub):
     assert hub.bowl_low is None
 
 
-async def test_command_preserves_settings_and_matches_ack(hub):
+@pytest.mark.parametrize("success_code", [0, 200])
+async def test_command_preserves_settings_and_matches_ack(hub, success_code):
     accept(hub, packet(hub))
     task = asyncio.create_task(hub.async_set_setting("autoHeating", "enable", True))
     await asyncio.sleep(0)
@@ -248,7 +249,7 @@ async def test_command_preserves_settings_and_matches_ack(hub):
     assert sent["data"] == {"autoHeating": {"enable": True, "target": 15}}
     assert sent["commandId"] == 103
     assert hub._client.publish.call_args.kwargs["retain"] is False
-    ack = packet(hub, 103, {}, requestId=sent["requestId"])
+    ack = packet(hub, 103, {}, code=success_code, requestId=sent["requestId"])
     hub.async_handle_message(hub.topics[0], ack, retained=True)
     assert not task.done()
     accept(hub, {**ack, "commandId": 102})
@@ -258,6 +259,79 @@ async def test_command_preserves_settings_and_matches_ack(hub):
     assert hub.data.setting["autoHeating"]["enable"] is False
     writes = [json.loads(c.args[1]) for c in hub._client.publish.call_args_list]
     assert sum(p["commandId"] == 103 for p in writes) == 1
+
+
+@pytest.mark.parametrize("command", [102, 103])
+@pytest.mark.parametrize("success_code", [0, 200])
+async def test_app_supported_ack_success_codes(hub, command, success_code):
+    accept(hub, packet(hub))
+    with patch("custom_components.ipetgravity.mqtt.COMMAND_TIMEOUT", 0.01):
+        task = asyncio.create_task(hub.async_command(command))
+        await asyncio.sleep(0)
+        sent = json.loads(hub._client.publish.call_args.args[1])
+        accept(
+            hub,
+            packet(hub, command, {}, code=success_code, requestId=sent["requestId"]),
+        )
+        await task
+    writes = [json.loads(call.args[1]) for call in hub._client.publish.call_args_list]
+    assert sum(payload["commandId"] == command for payload in writes) == 1
+    assert [payload["commandId"] for payload in writes[-3:]] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("invalid_code", [False, True, "0", "200"])
+async def test_malformed_ack_code_cannot_report_success(hub, invalid_code):
+    accept(hub, packet(hub))
+    task = asyncio.create_task(hub.async_command(102))
+    await asyncio.sleep(0)
+    sent = json.loads(hub._client.publish.call_args.args[1])
+    accept(hub, packet(hub, 102, {}, code=invalid_code, requestId=sent["requestId"]))
+    with pytest.raises(HomeAssistantError, match="rejected"):
+        await task
+
+
+@pytest.mark.parametrize(
+    "key,expected_data", [("dispense_once", None), ("pour_only", {"type": 5})]
+)
+async def test_ha_button_service_accepts_zero_ack(
+    hass, live_entry, client, key, expected_data
+):
+    async def fake_start(hub):
+        hub.connected = True
+        hub._client = MagicMock()
+        hub._client.publish.return_value.rc = 0
+
+    live_entry.add_to_hass(hass)
+    with patch.object(PetGravityMqttHub, "async_start", fake_start):
+        assert await hass.config_entries.async_setup(live_entry.entry_id)
+    await hass.async_block_till_done()
+    hub = live_entry.runtime_data.mqtt
+    accept(hub, packet(hub))
+    hub.async_handle_message(hub.topics[1], gateway_info(hub))
+    await hass.async_block_till_done()
+    entity_id = er.async_get(hass).async_get_entity_id(
+        "button", "ipetgravity", f"1_aabbccddee01_{key}"
+    )
+    publish = hub._publish
+
+    def publish_and_ack(command, **kwargs):
+        publish(command, **kwargs)
+        if command == 102:
+            hass.loop.call_soon(
+                accept,
+                hub,
+                packet(hub, 102, {}, code=0, requestId=kwargs["request_id"]),
+            )
+
+    with patch.object(hub, "_publish", side_effect=publish_and_ack):
+        await hass.services.async_call(
+            "button", "press", {"entity_id": entity_id}, blocking=True
+        )
+    writes = [json.loads(call.args[1]) for call in hub._client.publish.call_args_list]
+    actions = [payload for payload in writes if payload["commandId"] == 102]
+    assert len(actions) == 1
+    assert actions[0].get("data") == expected_data
+    assert not hub._pending
 
 
 async def test_timeout_never_repeats_physical_action(hub):

@@ -65,6 +65,8 @@ If 0.4.1 or 0.4.2 raised “state class removed” for last-drink volume, **do n
 
 控制命令需要新鲜状态和匹配的设备回执，保留同一设置中其它参数。超时后不会自动重发出水或设置命令。**实时读取已实测；设置和出水操作已核对 APK 并通过模拟测试，未对真实设备执行出水、加热或改设置来测试。**
 
+从 0.4.4 起，控制回执的数字 `code=0` 与 `code=200` 都按 App 的规则视为成功。此前合法的 `0` 回执会被忽略，可能出现“设备已执行，HA 却在 20 秒后报未收到确认”的现象。请求 ID、命令、设备、时间戳及非保留消息检查继续生效；真正没有回执时仍报结果未确认，并且不自动重发。此规则只适用于匹配到当前控制请求的回执，HTTP 和主动状态上报不改变。
+
 ### 在 HA 中设置水位通知
 
 通知由你自己的 HA 自动化负责，集成不会创建自动化或发送通知：
@@ -179,6 +181,6 @@ Tested with Home Assistant `2026.10.4`. Install development dependencies from `r
 
 ## Version
 
-Current version: `0.4.3`
+Current version: `0.4.4`
 
 The bundled icon is sourced from the public web app manifest at `https://www.ipetgravity.com/manifest.json`.
