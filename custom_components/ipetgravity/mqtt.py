@@ -255,7 +255,9 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
         now = time.time()
         fresh = stamp is not None and -300 <= now - stamp <= MAX_AGE
         request_id = payload.get("requestId")
-        # Retained or stale packets cannot acknowledge an action from this session.
+        # The app correlates replies by requestId, not by commandId. A reply
+        # without a timestamp can still confirm the current one-use request ID;
+        # an explicitly stale/invalid timestamp and retained replies cannot.
         pending_item = (
             self._pending.get(request_id) if isinstance(request_id, str) else None
         )
@@ -264,8 +266,7 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
             pending is not None
             and not pending.done()
             and not retained
-            and fresh
-            and payload.get("commandId") == pending_item[0]
+            and (fresh or payload.get("timestamp") is None)
         ):
             # App 1.2.0 MqttCommand.isRespSuccess accepts numeric 0 and 200.
             # HTTP and unsolicited telemetry still require their own 200 code.

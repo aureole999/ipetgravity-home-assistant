@@ -252,7 +252,7 @@ async def test_command_preserves_settings_and_matches_ack(hub, success_code):
     ack = packet(hub, 103, {}, code=success_code, requestId=sent["requestId"])
     hub.async_handle_message(hub.topics[0], ack, retained=True)
     assert not task.done()
-    accept(hub, {**ack, "commandId": 102})
+    accept(hub, {**ack, "requestId": "another-request"})
     assert not task.done()
     accept(hub, ack)
     await task
@@ -277,6 +277,38 @@ async def test_app_supported_ack_success_codes(hub, command, success_code):
     writes = [json.loads(call.args[1]) for call in hub._client.publish.call_args_list]
     assert sum(payload["commandId"] == command for payload in writes) == 1
     assert [payload["commandId"] for payload in writes[-3:]] == [1, 2, 3]
+
+
+@pytest.mark.parametrize("reply_command", [101, 104, None])
+@pytest.mark.parametrize("timestamp_present", [True, False])
+async def test_app_ack_matches_active_request_not_echoed_command(
+    hub, reply_command, timestamp_present
+):
+    accept(hub, packet(hub))
+    task = asyncio.create_task(hub.async_command(102))
+    await asyncio.sleep(0)
+    sent = json.loads(hub._client.publish.call_args.args[1])
+    reply = packet(hub, reply_command, {}, code=0, requestId=sent["requestId"])
+    if not timestamp_present:
+        reply.pop("timestamp")
+    accept(hub, {**reply, "requestId": "unrelated"})
+    assert not task.done()
+    accept(hub, reply)
+    await task
+    assert hub.data.running["weight"]["current"] == 81
+
+
+@pytest.mark.parametrize("timestamp", [0, "invalid", True])
+async def test_ack_with_explicitly_bad_timestamp_still_cannot_confirm(hub, timestamp):
+    accept(hub, packet(hub))
+    task = asyncio.create_task(hub.async_command(102))
+    await asyncio.sleep(0)
+    sent = json.loads(hub._client.publish.call_args.args[1])
+    reply = packet(hub, 104, {}, code=0, requestId=sent["requestId"])
+    accept(hub, {**reply, "timestamp": timestamp})
+    assert not task.done()
+    accept(hub, reply)
+    await task
 
 
 @pytest.mark.parametrize("invalid_code", [False, True, "0", "200"])
