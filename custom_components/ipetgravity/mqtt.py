@@ -33,7 +33,9 @@ from .const import (
 )
 
 LOGGER = logging.getLogger(__name__)
-BROKER = "47.96.40.6"
+# The vendor retired the bare IP 47.96.40.6:1883 (Nov 2026); use the DNS name
+# so future load-balancer moves are followed automatically.
+BROKER = "mqtt.ipetgravity.com"
 PORT = 1883
 MAX_AGE = 15 * 60
 COMMAND_TIMEOUT = 20
@@ -164,6 +166,8 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
         if self._closed:
             return
         success = reason_code == 0
+        if not success:
+            LOGGER.warning("PetGravity MQTT connection refused: %s", reason_code)
         if success:
             for topic in self.topics:
                 client.subscribe(topic, qos=0)
@@ -171,6 +175,7 @@ class PetGravityMqttHub(DataUpdateCoordinator[PetGravityTelemetry]):
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties) -> None:
         if not self._closed:
+            LOGGER.debug("PetGravity MQTT disconnected: %s", reason_code)
             self.hass.loop.call_soon_threadsafe(self._connection_changed, False)
 
     def _on_message(self, client, userdata, message) -> None:
